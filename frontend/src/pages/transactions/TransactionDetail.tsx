@@ -90,13 +90,13 @@ export function TransactionDetail() {
         <div className="card p-4">
           <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-3">Transaction Info</p>
           <div className="space-y-2">
-            {[
-              ['Cashier', tx.staff_name],
-              ['Branch', tx.branch_name],
-              ['Date', date],
-              tx.hash ? ['Integrity Hash', <span key="hash" className="font-mono text-xs text-gray-400">{tx.hash}</span>] : null,
-            ].filter((item): item is [string, React.ReactNode] => item !== null).map(([label, value]) => (
-              <div key={label as string} className="flex justify-between gap-3">
+            {([
+              ['Cashier', tx.staff_name] as [string, React.ReactNode],
+              ['Branch', tx.branch_name] as [string, React.ReactNode],
+              ['Date', date] as [string, React.ReactNode],
+              ...(tx.hash ? [['Integrity Hash', <span key="hash" className="font-mono text-xs text-gray-400">{tx.hash}</span>] as [string, React.ReactNode]] : []),
+            ]).map(([label, value]) => (
+              <div key={label} className="flex justify-between gap-3">
                 <span className="text-sm text-gray-500">{label}</span>
                 <span className="text-sm font-medium text-gray-700 text-right">{value}</span>
               </div>
