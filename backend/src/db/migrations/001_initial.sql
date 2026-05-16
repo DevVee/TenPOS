@@ -1,9 +1,6 @@
 -- TenPOS Database Schema
 -- Ten Foundation Philippines Inc.
 
--- Enable UUID generation
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
-
 -- ─────────────────────────────────────────────
 -- ENUMS
 -- ─────────────────────────────────────────────
