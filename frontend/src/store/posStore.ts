@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import { v4 as uuid } from 'uuid'
 import type { CartItem, Product, ProductVariant, Payment } from '../types'
 import { submitTransaction } from '../lib/sync'
 

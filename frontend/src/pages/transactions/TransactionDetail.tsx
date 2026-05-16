@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Printer, RotateCcw, XCircle, Loader2, AlertCircle } from 'lucide-react'
 import { Badge } from '../../components/ui/Badge'
@@ -95,7 +95,7 @@ export function TransactionDetail() {
               ['Branch', tx.branch_name],
               ['Date', date],
               tx.hash ? ['Integrity Hash', <span key="hash" className="font-mono text-xs text-gray-400">{tx.hash}</span>] : null,
-            ].filter(Boolean).map(([label, value]) => (
+            ].filter((item): item is [string, React.ReactNode] => item !== null).map(([label, value]) => (
               <div key={label as string} className="flex justify-between gap-3">
                 <span className="text-sm text-gray-500">{label}</span>
                 <span className="text-sm font-medium text-gray-700 text-right">{value}</span>

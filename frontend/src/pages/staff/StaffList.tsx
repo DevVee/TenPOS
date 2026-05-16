@@ -30,7 +30,7 @@ export function StaffList() {
   const [roleFilter, setRoleFilter] = useState<string>('all')
 
   const { data, loading, error } = useApiData<{ data: StaffMember[]; total: number }>(
-    () => apiGetStaff({ limit: '100' })
+    () => apiGetStaff({ limit: '100' }) as Promise<{ data: StaffMember[]; total: number }>
   )
 
   const staff       = data?.data ?? []

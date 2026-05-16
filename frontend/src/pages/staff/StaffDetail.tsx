@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Key, UserX, UserCheck, Check, X, Loader2, Pencil } from 'lucide-react'
+import { ArrowLeft, UserX, UserCheck, Check, X, Loader2, Pencil } from 'lucide-react'
 import { Badge } from '../../components/ui/Badge'
 import { Modal } from '../../components/ui/Modal'
 import { apiGetStaffMember, apiUpdateStaff, apiDeleteStaff } from '../../lib/api'
