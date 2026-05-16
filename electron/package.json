@@ -1,0 +1,74 @@
+{
+  "name": "tenpos-desktop",
+  "version": "1.0.0",
+  "description": "TenPOS Desktop — Ten Foundation Philippines Inc.",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:vite\" \"npm run dev:electron\"",
+    "dev:vite": "cd ../frontend && npm run dev",
+    "dev:electron": "tsc && electron .",
+    "build": "npm run build:frontend && npm run build:electron",
+    "build:frontend": "cd ../frontend && npm run build",
+    "build:electron": "tsc && electron-builder",
+    "build:electron:win": "tsc && electron-builder --win",
+    "build:electron:mac": "tsc && electron-builder --mac"
+  },
+  "build": {
+    "appId": "ph.tenfoundation.tenpos",
+    "productName": "TenPOS",
+    "copyright": "© 2025 Ten Foundation Philippines Inc.",
+    "directories": {
+      "output": "release",
+      "buildResources": "assets"
+    },
+    "files": [
+      "dist-electron/**/*",
+      "renderer/**/*"
+    ],
+    "extraFiles": [
+      {
+        "from": "../backend",
+        "to": "backend",
+        "filter": [
+          "**/*",
+          "!node_modules/**",
+          "!src/**",
+          "!*.ts",
+          "!.env*"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] }
+      ],
+      "icon": "assets/icon.ico",
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
+      "installerHeaderIcon": "assets/icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "TenPOS"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "assets/icon.icns",
+      "category": "public.app-category.business"
+    }
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "concurrently": "^9.1.2",
+    "electron": "^32.2.7",
+    "electron-builder": "^25.1.8",
+    "typescript": "^5.5.3"
+  }
+}

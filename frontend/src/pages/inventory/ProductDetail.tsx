@@ -1,0 +1,229 @@
+import { useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { ArrowLeft, Edit, Trash2, TrendingDown, Loader2 } from 'lucide-react'
+import { Badge } from '../../components/ui/Badge'
+import { Modal } from '../../components/ui/Modal'
+import { apiGetProduct, apiDeleteProduct, apiGetAdjustments } from '../../lib/api'
+import { useApiData } from '../../hooks/useApiData'
+
+function fmt(n: number) { return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2 })}` }
+
+interface Variant { id: string; label: string; value: string; price_adjustment: number }
+interface InventoryRow { branch_name: string; stock: number; reorder_point: number }
+interface Product {
+  id: string; sku: string; barcode: string | null; name: string
+  description: string | null; category_name: string | null
+  price: number; cost: number | null; active: boolean
+  variants: Variant[]
+  inventory: InventoryRow[]
+}
+
+interface Adjustment {
+  id: string; type: string; quantity: number; reason: string
+  created_at: string; branch_name: string
+}
+
+export function ProductDetail() {
+  const navigate = useNavigate()
+  const { id } = useParams<{ id: string }>()
+  const [deleteModal, setDeleteModal] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  const { data: product, loading, error } = useApiData<Product>(
+    () => apiGetProduct(id!) as Promise<Product>,
+    [id]
+  )
+
+  const { data: adjData } = useApiData<{ data: Adjustment[] }>(
+    () => apiGetAdjustments({ product_id: id!, limit: '20' }) as Promise<{ data: Adjustment[] }>,
+    [id]
+  )
+  const movements = adjData?.data ?? []
+
+  const handleDelete = async () => {
+    setDeleting(true)
+    try {
+      await apiDeleteProduct(id!)
+      navigate('/inventory')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-6 h-6 animate-spin text-brand" />
+      </div>
+    )
+  }
+
+  if (error || !product) {
+    return (
+      <div className="max-w-3xl mx-auto">
+        <button onClick={() => navigate('/inventory')} className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-4">
+          <ArrowLeft className="w-4 h-4" /> Back to Inventory
+        </button>
+        <div className="card p-6 text-center text-red-500">{error || 'Product not found'}</div>
+      </div>
+    )
+  }
+
+  const totalStock = product.inventory.reduce((s, i) => s + i.stock, 0)
+  const margin = product.cost != null && product.price > 0
+    ? ((product.price - product.cost) / product.price * 100).toFixed(1)
+    : null
+
+  return (
+    <div className="max-w-3xl mx-auto">
+      <div className="flex items-center justify-between mb-5">
+        <div className="flex items-center gap-3">
+          <button onClick={() => navigate('/inventory')} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <div>
+            <h1 className="text-lg font-semibold text-gray-900">{product.name}</h1>
+            <p className="text-sm text-gray-400 font-mono">{product.sku}</p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={() => navigate(`/inventory/edit/${id}`)} className="btn-secondary flex items-center gap-1.5">
+            <Edit className="w-4 h-4" /> Edit
+          </button>
+          <button
+            onClick={() => setDeleteModal(true)}
+            className="btn-secondary flex items-center gap-1.5 text-red-500 border-red-200 hover:bg-red-50"
+          >
+            <Trash2 className="w-4 h-4" /> Delete
+          </button>
+        </div>
+      </div>
+
+      <div className="grid sm:grid-cols-2 gap-4 mb-4">
+        <div className="card p-4">
+          <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-3">Product Details</p>
+          <div className="space-y-2">
+            {[
+              ['SKU',         product.sku],
+              ['Barcode',     product.barcode ?? '—'],
+              ['Category',    product.category_name ?? '—'],
+              ['Description', product.description ?? '—'],
+              ['Status',      product.active ? 'Active' : 'Inactive'],
+            ].map(([l, v]) => (
+              <div key={l as string} className="flex justify-between gap-3">
+                <span className="text-sm text-gray-500">{l}</span>
+                <span className="text-sm font-medium text-gray-700 text-right">{v}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="card p-4">
+          <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-3">Pricing & Stock</p>
+          <div className="space-y-2">
+            {[
+              ['Cost Price',    product.cost != null ? fmt(product.cost) : '—'],
+              ['Selling Price', fmt(product.price)],
+              ['Gross Margin',  margin ? `${margin}%` : '—'],
+              ['Total Stock',   `${totalStock} units`],
+            ].map(([l, v]) => (
+              <div key={l as string} className="flex justify-between gap-3">
+                <span className="text-sm text-gray-500">{l}</span>
+                <span className={`text-sm font-medium ${l === 'Gross Margin' ? 'text-green-600' : 'text-gray-700'}`}>{v}</span>
+              </div>
+            ))}
+          </div>
+          {product.inventory.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-gray-100 space-y-1.5">
+              <p className="text-xs text-gray-400 font-medium">By Branch</p>
+              {product.inventory.map((inv) => (
+                <div key={inv.branch_name} className="flex justify-between text-sm">
+                  <span className="text-gray-500">{inv.branch_name}</span>
+                  <span className={`font-medium ${inv.stock <= inv.reorder_point ? 'text-brand' : 'text-gray-700'}`}>
+                    {inv.stock} units
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {product.variants.length > 0 && (
+        <div className="card p-4 mb-4">
+          <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-3">Variants</p>
+          <div className="space-y-2">
+            {product.variants.map((v) => (
+              <div key={v.id} className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0">
+                <Badge variant="gray">{v.label}: {v.value}</Badge>
+                <span className="text-sm text-gray-600">
+                  {v.price_adjustment !== 0
+                    ? `${fmt(product.price + v.price_adjustment)} (${v.price_adjustment > 0 ? '+' : ''}${fmt(v.price_adjustment)})`
+                    : fmt(product.price)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="card overflow-hidden">
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
+          <TrendingDown className="w-4 h-4 text-gray-400" />
+          <p className="text-sm font-semibold text-gray-800">Stock Movement History</p>
+        </div>
+        {movements.length === 0 ? (
+          <div className="py-8 text-center text-sm text-gray-400">No stock movements yet</div>
+        ) : (
+          <table className="w-full">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-400">Date</th>
+                <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-400">Type</th>
+                <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-400">Change</th>
+                <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-400 hidden sm:table-cell">Reason</th>
+                <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-400 hidden md:table-cell">Branch</th>
+              </tr>
+            </thead>
+            <tbody>
+              {movements.map((m) => (
+                <tr key={m.id} className="table-row">
+                  <td className="px-4 py-3 text-sm text-gray-500">
+                    {new Date(m.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </td>
+                  <td className="px-4 py-3">
+                    <Badge variant={m.type === 'remove' ? 'red' : m.type === 'add' ? 'green' : 'yellow'}>
+                      {m.type}
+                    </Badge>
+                  </td>
+                  <td className={`px-4 py-3 text-sm font-semibold text-right ${m.quantity > 0 ? 'text-green-600' : 'text-brand'}`}>
+                    {m.quantity > 0 ? '+' : ''}{m.quantity}
+                  </td>
+                  <td className="px-4 py-3 text-xs text-gray-400 hidden sm:table-cell">{m.reason}</td>
+                  <td className="px-4 py-3 text-xs text-gray-400 hidden md:table-cell">{m.branch_name}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <Modal open={deleteModal} onClose={() => setDeleteModal(false)} title="Deactivate Product">
+        <p className="text-sm text-gray-600 mb-5">
+          This will deactivate <strong>{product.name}</strong> and remove it from the POS. Existing transactions are unaffected.
+        </p>
+        <div className="flex gap-2">
+          <button onClick={() => setDeleteModal(false)} className="btn-secondary flex-1">Cancel</button>
+          <button
+            onClick={handleDelete}
+            disabled={deleting}
+            className="flex-1 bg-red-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {deleting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+            Deactivate
+          </button>
+        </div>
+      </Modal>
+    </div>
+  )
+}

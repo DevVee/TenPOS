@@ -1,0 +1,191 @@
+import { useState, useEffect, useCallback } from 'react'
+import { Search, Filter, Download, Loader2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Badge } from '../../components/ui/Badge'
+import { PageHeader } from '../../components/ui/PageHeader'
+import { apiGetTransactions } from '../../lib/api'
+
+function fmt(n: number) { return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2 })}` }
+
+interface Transaction {
+  id: string
+  receipt_no: string
+  created_at: string
+  staff_name: string
+  item_count: number
+  subtotal: number
+  total: number
+  payment_method: string
+  status: string
+}
+
+const PAGE_SIZE = 20
+
+export function TransactionList() {
+  const navigate = useNavigate()
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [page, setPage] = useState(1)
+  const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [total, setTotal] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const params: Record<string, string> = {
+        limit: String(PAGE_SIZE),
+        offset: String((page - 1) * PAGE_SIZE),
+        sort: 'desc',
+      }
+      if (statusFilter !== 'all') params.status = statusFilter
+      if (search.trim()) params.search = search.trim()
+
+      const res = await apiGetTransactions(params) as { data: Transaction[]; total: number }
+      setTransactions(res.data ?? [])
+      setTotal(res.total ?? 0)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load transactions')
+    } finally {
+      setLoading(false)
+    }
+  }, [search, statusFilter, page])
+
+  useEffect(() => { load() }, [load])
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+
+  const paymentBadge = (method: string): 'green' | 'blue' | 'gray' | 'yellow' => {
+    const m = method?.toLowerCase()
+    if (m === 'cash') return 'green'
+    if (m === 'gcash') return 'blue'
+    if (m === 'card') return 'gray'
+    return 'yellow'
+  }
+
+  return (
+    <div>
+      <PageHeader
+        title="Transactions"
+        subtitle="All sales, voids, and returns"
+        actions={
+          <button className="btn-secondary flex items-center gap-1.5">
+            <Download className="w-4 h-4" /> Export
+          </button>
+        }
+      />
+
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <div className="relative flex-1 min-w-48">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input
+            className="input-base pl-9"
+            placeholder="Search receipt # or cashier..."
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1) }}
+          />
+        </div>
+        <div className="flex gap-1.5">
+          {['all', 'completed', 'voided', 'refunded'].map((s) => (
+            <button
+              key={s}
+              onClick={() => { setStatusFilter(s); setPage(1) }}
+              className={`px-3 py-2 rounded-lg text-xs font-medium capitalize transition-colors ${
+                statusFilter === s
+                  ? 'bg-brand text-white'
+                  : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+        <button className="btn-secondary flex items-center gap-1.5">
+          <Filter className="w-4 h-4" /> Date Range
+        </button>
+      </div>
+
+      {error && (
+        <div className="card p-4 mb-4 text-sm text-red-600 bg-red-50 border-red-100">{error}</div>
+      )}
+
+      <div className="card overflow-hidden">
+        {loading ? (
+          <div className="flex items-center justify-center h-48">
+            <Loader2 className="w-6 h-6 animate-spin text-brand" />
+          </div>
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-100">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Receipt #</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Date & Time</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 hidden md:table-cell">Cashier</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 hidden sm:table-cell">Items</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Method</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Status</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {transactions.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-10 text-center text-sm text-gray-400">No transactions found</td>
+                    </tr>
+                  ) : (
+                    transactions.map((t) => (
+                      <tr
+                        key={t.id}
+                        className="table-row cursor-pointer"
+                        onClick={() => navigate(`/transactions/${t.id}`)}
+                      >
+                        <td className="px-4 py-3 text-sm font-medium text-gray-700">{t.receipt_no}</td>
+                        <td className="px-4 py-3">
+                          <p className="text-sm text-gray-700">{new Date(t.created_at).toLocaleDateString('en-PH')}</p>
+                          <p className="text-xs text-gray-400">{new Date(t.created_at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}</p>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600 hidden md:table-cell">{t.staff_name}</td>
+                        <td className="px-4 py-3 text-sm text-gray-500 hidden sm:table-cell">{t.item_count}</td>
+                        <td className="px-4 py-3">
+                          <Badge variant={paymentBadge(t.payment_method)}>{t.payment_method}</Badge>
+                        </td>
+                        <td className="px-4 py-3">
+                          <Badge variant={t.status === 'completed' ? 'green' : t.status === 'voided' ? 'red' : 'yellow'}>{t.status}</Badge>
+                        </td>
+                        <td className="px-4 py-3 text-sm font-semibold text-gray-800 text-right">{fmt(Number(t.total))}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-400">
+              <span>Showing {transactions.length} of {total} transactions</span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="p-1.5 rounded-md bg-gray-100 hover:bg-gray-200 disabled:opacity-40 transition-colors"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </button>
+                <span className="px-2">{page} / {totalPages}</span>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="p-1.5 rounded-md bg-gray-100 hover:bg-gray-200 disabled:opacity-40 transition-colors"
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}

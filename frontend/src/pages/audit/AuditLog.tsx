@@ -1,0 +1,153 @@
+import { useState } from 'react'
+import { Search, Download, Shield, Loader2 } from 'lucide-react'
+import { Badge } from '../../components/ui/Badge'
+import { PageHeader } from '../../components/ui/PageHeader'
+import { apiGetAuditLog } from '../../lib/api'
+import { useApiData } from '../../hooks/useApiData'
+
+interface AuditEntry {
+  id: string
+  action: string
+  user_name: string
+  user_role: string
+  details: Record<string, unknown> | string
+  ip: string
+  severity: 'low' | 'medium' | 'high' | 'critical'
+  created_at: string
+}
+
+const SEV_VARIANT: Record<string, 'red' | 'yellow' | 'green' | 'gray'> = {
+  critical: 'red',
+  high:     'red',
+  medium:   'yellow',
+  low:      'green',
+}
+
+export function AuditLog() {
+  const [search,   setSearch]   = useState('')
+  const [severity, setSeverity] = useState('all')
+
+  const { data, loading, error } = useApiData<{ data: AuditEntry[]; total: number }>(
+    () => {
+      const params: Record<string, string> = { limit: '100' }
+      if (severity !== 'all') params.severity = severity
+      if (search.trim()) params.action = search.trim()
+      return apiGetAuditLog(params) as Promise<{ data: AuditEntry[]; total: number }>
+    },
+    [severity]
+  )
+
+  const entries = data?.data ?? []
+
+  const filtered = entries.filter((a) => {
+    if (!search) return true
+    const q = search.toLowerCase()
+    const details = typeof a.details === 'string' ? a.details : JSON.stringify(a.details)
+    return (
+      a.action?.toLowerCase().includes(q) ||
+      a.user_name?.toLowerCase().includes(q) ||
+      details?.toLowerCase().includes(q)
+    )
+  })
+
+  return (
+    <div>
+      <PageHeader
+        title="Audit Log"
+        subtitle="Immutable record of all system actions"
+        actions={
+          <button className="btn-secondary flex items-center gap-1.5"><Download className="w-4 h-4" /> Export Log</button>
+        }
+      />
+
+      <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 mb-4 flex items-center gap-2.5">
+        <Shield className="w-4 h-4 text-blue-500 flex-shrink-0" />
+        <p className="text-xs text-blue-700">This log is append-only and tamper-evident. All entries are SHA-256 hashed and cannot be modified or deleted.</p>
+      </div>
+
+      {error && (
+        <div className="card p-4 mb-4 text-sm text-red-600 bg-red-50 border-red-100">{error}</div>
+      )}
+
+      <div className="flex flex-wrap gap-3 mb-4">
+        <div className="relative flex-1 min-w-48">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input
+            className="input-base pl-9"
+            placeholder="Search actions, users, details..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <div className="flex gap-1.5">
+          {['all', 'low', 'medium', 'high', 'critical'].map((s) => (
+            <button
+              key={s}
+              onClick={() => setSeverity(s)}
+              className={`px-3 py-2 rounded-lg text-xs font-medium capitalize transition-colors ${
+                severity === s ? 'bg-brand text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+              }`}
+            >{s}</button>
+          ))}
+        </div>
+      </div>
+
+      <div className="card overflow-hidden">
+        {loading ? (
+          <div className="flex items-center justify-center h-48">
+            <Loader2 className="w-6 h-6 animate-spin text-brand" />
+          </div>
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-100">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Severity</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Action</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 hidden md:table-cell">User</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 hidden lg:table-cell">Details</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 hidden md:table-cell">IP</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Timestamp</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.length === 0 ? (
+                    <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-400">No audit entries found</td></tr>
+                  ) : (
+                    filtered.map((a) => {
+                      const details = typeof a.details === 'string'
+                        ? a.details
+                        : Object.entries(a.details ?? {}).map(([k, v]) => `${k}: ${v}`).join(', ')
+                      return (
+                        <tr key={a.id} className="table-row">
+                          <td className="px-4 py-3">
+                            <Badge variant={SEV_VARIANT[a.severity] ?? 'gray'}>
+                              {a.severity}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-3 text-sm font-medium text-gray-700">{a.action}</td>
+                          <td className="px-4 py-3 text-sm text-gray-500 hidden md:table-cell">{a.user_name}</td>
+                          <td className="px-4 py-3 text-sm text-gray-400 hidden lg:table-cell max-w-xs truncate">{details}</td>
+                          <td className="px-4 py-3 text-xs text-gray-400 font-mono hidden md:table-cell">{a.ip}</td>
+                          <td className="px-4 py-3 text-xs text-gray-400">
+                            {new Date(a.created_at).toLocaleString('en-PH', {
+                              month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+                            })}
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div className="px-4 py-3 border-t border-gray-50 text-xs text-gray-400">
+              Showing {filtered.length} of {data?.total ?? 0} entries
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
