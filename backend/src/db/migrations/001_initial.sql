@@ -134,10 +134,10 @@ CREATE TABLE inventory (
   branch_id     UUID NOT NULL REFERENCES branches(id) ON DELETE CASCADE,
   stock         INT NOT NULL DEFAULT 0,
   reorder_point INT NOT NULL DEFAULT 5,
-  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE(product_id, COALESCE(variant_id, '00000000-0000-0000-0000-000000000000'::UUID), branch_id)
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE UNIQUE INDEX idx_inventory_unique ON inventory(product_id, COALESCE(variant_id, '00000000-0000-0000-0000-000000000000'::UUID), branch_id);
 CREATE INDEX idx_inventory_product ON inventory(product_id);
 CREATE INDEX idx_inventory_branch ON inventory(branch_id);
 CREATE INDEX idx_inventory_low_stock ON inventory(stock, reorder_point);
