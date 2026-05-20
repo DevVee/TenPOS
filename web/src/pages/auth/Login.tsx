@@ -2,11 +2,10 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Eye, EyeOff, AlertCircle, ShoppingCart, Users, ArrowRight,
-  Zap, Package, Globe, Shield, Mail, CheckCircle2,
+  Zap, Package, Globe, Shield, Mail,
 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { apiLogin } from '../../lib/api'
-import { supabase } from '../../lib/supabase'
 import type { UserRole } from '../../types'
 
 const FEATURES = [
@@ -31,13 +30,6 @@ export function Login() {
   const [error,    setError]    = useState('')
   const [loading,  setLoading]  = useState(false)
 
-  // Forgot-password mode
-  const [forgotMode,    setForgotMode]    = useState(false)
-  const [forgotEmail,   setForgotEmail]   = useState('')
-  const [forgotSent,    setForgotSent]    = useState(false)
-  const [forgotLoading, setForgotLoading] = useState(false)
-  const [forgotError,   setForgotError]   = useState('')
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
@@ -53,24 +45,6 @@ export function Login() {
       setError(err instanceof Error ? err.message : 'Incorrect email or password.')
     } finally {
       setLoading(false)
-    }
-  }
-
-  const handleForgotPassword = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setForgotError('')
-    if (!forgotEmail) { setForgotError('Enter your email address.'); return }
-    setForgotLoading(true)
-    try {
-      const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
-        redirectTo: `${window.location.origin}/reset-password`,
-      })
-      if (error) throw error
-      setForgotSent(true)
-    } catch (err) {
-      setForgotError(err instanceof Error ? err.message : 'Failed to send reset email.')
-    } finally {
-      setForgotLoading(false)
     }
   }
 
@@ -165,123 +139,62 @@ export function Login() {
               </div>
             </div>
 
-            {/* ── FORGOT PASSWORD MODE ────────────────────────────────── */}
-            {forgotMode ? (
-              <>
-                <h2 className="text-2xl font-black text-gray-900 text-center mb-1">Reset password</h2>
-                <p className="text-sm text-gray-400 text-center mb-6">Enter your email and we'll send a reset link.</p>
+            <h2 className="text-2xl font-black text-gray-900 text-center mb-1">Welcome back!</h2>
+            <p className="text-sm text-gray-400 text-center mb-6">Sign in to your TenPOS account</p>
 
-                {forgotSent ? (
-                  <div className="flex flex-col items-center gap-3 py-6">
-                    <div className="w-14 h-14 rounded-full bg-green-50 flex items-center justify-center">
-                      <CheckCircle2 className="w-7 h-7 text-green-500" />
-                    </div>
-                    <p className="text-sm font-semibold text-gray-800 text-center">Check your inbox</p>
-                    <p className="text-xs text-gray-400 text-center">We sent a reset link to <span className="font-medium text-gray-600">{forgotEmail}</span></p>
-                    <button onClick={() => { setForgotMode(false); setForgotSent(false); setForgotEmail('') }} className="mt-3 text-sm text-brand font-semibold hover:underline">
-                      Back to sign in
-                    </button>
-                  </div>
-                ) : (
-                  <form onSubmit={handleForgotPassword} className="space-y-4">
-                    {forgotError && (
-                      <div className="flex items-center gap-2.5 bg-brand-pale border border-red-200 text-brand text-sm rounded-xl px-4 py-3">
-                        <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                        <span>{forgotError}</span>
-                      </div>
-                    )}
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-1.5">Email address</label>
-                      <div className="relative">
-                        <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                        <input
-                          type="email"
-                          className="input-base pl-10"
-                          placeholder="you@example.com"
-                          value={forgotEmail}
-                          onChange={(e) => setForgotEmail(e.target.value)}
-                          autoFocus
-                        />
-                      </div>
-                    </div>
-                    <button type="submit" disabled={forgotLoading} className="btn-primary w-full justify-center py-3.5 text-sm rounded-xl gap-2">
-                      {forgotLoading
-                        ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Sending...</>
-                        : <>Send reset link <ArrowRight className="w-4 h-4" /></>}
-                    </button>
-                    <button type="button" onClick={() => setForgotMode(false)} className="w-full text-center text-sm text-gray-400 hover:text-gray-600 transition-colors">
-                      Back to sign in
-                    </button>
-                  </form>
-                )}
-              </>
-            ) : (
-              /* ── SIGN-IN MODE ──────────────────────────────────────── */
-              <>
-                <h2 className="text-2xl font-black text-gray-900 text-center mb-1">Welcome back!</h2>
-                <p className="text-sm text-gray-400 text-center mb-6">Sign in to your TenPOS account</p>
-
-                {error && (
-                  <div className="flex items-center gap-2.5 bg-brand-pale border border-red-200 text-brand text-sm rounded-xl px-4 py-3 mb-4">
-                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                    <span>{error}</span>
-                  </div>
-                )}
-
-                <form onSubmit={handleLogin} className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">Email</label>
-                    <div className="relative">
-                      <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                      <input
-                        type="email"
-                        className="input-base pl-10"
-                        placeholder="admin@tenpos.ph"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        autoComplete="email"
-                        autoFocus
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">Password</label>
-                    <div className="relative">
-                      <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                      <input
-                        type={showPass ? 'text' : 'password'}
-                        className="input-base pl-10 pr-11"
-                        placeholder="••••••••"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        autoComplete="current-password"
-                      />
-                      <button type="button" onClick={() => setShowPass((v) => !v)} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1" tabIndex={-1}>
-                        {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-end">
-                    <button type="button" onClick={() => setForgotMode(true)} className="text-sm text-brand font-semibold hover:underline">
-                      Forgot password?
-                    </button>
-                  </div>
-
-                  <button type="submit" disabled={loading} className="btn-primary w-full justify-center py-3.5 text-sm rounded-xl gap-2">
-                    {loading
-                      ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Signing in...</>
-                      : <>Sign In <ArrowRight className="w-4 h-4" /></>}
-                  </button>
-                </form>
-
-                <p className="text-center text-xs text-gray-400 mt-4">
-                  Need access?{' '}
-                  <span className="text-gray-600 font-medium">Contact your system administrator.</span>
-                </p>
-              </>
+            {error && (
+              <div className="flex items-center gap-2.5 bg-brand-pale border border-red-200 text-brand text-sm rounded-xl px-4 py-3 mb-4">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <span>{error}</span>
+              </div>
             )}
+
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Email</label>
+                <div className="relative">
+                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="email"
+                    className="input-base pl-10"
+                    placeholder="admin@tenpos.ph"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    autoComplete="email"
+                    autoFocus
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Password</label>
+                <div className="relative">
+                  <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                  <input
+                    type={showPass ? 'text' : 'password'}
+                    className="input-base pl-10 pr-11"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="current-password"
+                  />
+                  <button type="button" onClick={() => setShowPass((v) => !v)} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1" tabIndex={-1}>
+                    {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <button type="submit" disabled={loading} className="btn-primary w-full justify-center py-3.5 text-sm rounded-xl gap-2">
+                {loading
+                  ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Signing in...</>
+                  : <>Sign In <ArrowRight className="w-4 h-4" /></>}
+              </button>
+            </form>
+
+            <p className="text-center text-xs text-gray-400 mt-4">
+              Need access?{' '}
+              <span className="text-gray-600 font-medium">Contact your system administrator.</span>
+            </p>
           </div>
         </div>
 

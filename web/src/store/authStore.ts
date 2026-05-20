@@ -6,30 +6,23 @@ import { getAvatarInitials } from '@tenpos/shared'
 interface AuthState {
   user: User | null
   isAuthenticated: boolean
-  pinLocked: boolean
   isLoading: boolean
   login: (user: User) => void
   logout: () => void
-  lockPin: () => void
-  unlockPin: () => void
   restoreSession: () => Promise<void>
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   isAuthenticated: false,
-  pinLocked: false,
   isLoading: true,
 
-  login: (user) => set({ user, isAuthenticated: true, pinLocked: false }),
+  login: (user) => set({ user, isAuthenticated: true }),
 
   logout: () => {
     clearTokens()
-    set({ user: null, isAuthenticated: false, pinLocked: false })
+    set({ user: null, isAuthenticated: false })
   },
-
-  lockPin: () => set({ pinLocked: true }),
-  unlockPin: () => set({ pinLocked: false }),
 
   restoreSession: async () => {
     const token = getToken()

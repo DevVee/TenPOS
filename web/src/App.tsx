@@ -4,14 +4,12 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { useAuthStore } from './store/authStore'
 import { startSyncLoop, stopSyncLoop, refreshProductCache, refreshInventoryCache } from './lib/sync'
 
-import { AuthLayout } from './components/layout/AuthLayout'
 import { AppLayout }  from './components/layout/AppLayout'
 
 // ── Lazy page imports — each page becomes its own JS chunk ────────────────────
 // Pattern: lazy(() => import('...').then(m => ({ default: m.ExportName })))
 
 const Login           = lazy(() => import('./pages/auth/Login')                    .then(m => ({ default: m.Login })))
-const PinLock         = lazy(() => import('./pages/auth/PinLock')                  .then(m => ({ default: m.PinLock })))
 
 const POSTerminal     = lazy(() => import('./pages/pos/POSTerminal')               .then(m => ({ default: m.POSTerminal })))
 const Payment         = lazy(() => import('./pages/pos/Payment')                   .then(m => ({ default: m.Payment })))
@@ -102,9 +100,6 @@ function BoundedRoutes() {
         <Routes>
           {/* Auth */}
           <Route path="/login" element={<Login />} />
-          <Route element={<AuthLayout />}>
-            <Route path="/pin" element={<PinLock />} />
-          </Route>
 
           {/* POS Terminal — full screen, no sidebar */}
           <Route path="/pos"             element={<RequireAuth><POSLayout><POSTerminal /></POSLayout></RequireAuth>} />
