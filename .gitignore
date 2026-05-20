@@ -35,3 +35,10 @@ dist-ssr
 
 # Claude Code local settings (contains sensitive permission rules)
 .claude/settings.local.json
+
+# Credential files — NEVER commit these
+Supabase.MD
+supabase.md
+*.secrets
+secrets.*
+credentials.*
