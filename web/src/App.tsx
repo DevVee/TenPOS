@@ -1,49 +1,64 @@
-import { useEffect, Component } from 'react'
+import { lazy, Suspense, useEffect, Component } from 'react'
 import type { ReactNode, ErrorInfo } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from './store/authStore'
 import { startSyncLoop, stopSyncLoop, refreshProductCache, refreshInventoryCache } from './lib/sync'
 
 import { AuthLayout } from './components/layout/AuthLayout'
-import { AppLayout } from './components/layout/AppLayout'
+import { AppLayout }  from './components/layout/AppLayout'
 
-import { Login } from './pages/auth/Login'
-import { PinLock } from './pages/auth/PinLock'
+// ── Lazy page imports — each page becomes its own JS chunk ────────────────────
+// Pattern: lazy(() => import('...').then(m => ({ default: m.ExportName })))
 
-import { POSTerminal } from './pages/pos/POSTerminal'
-import { Payment } from './pages/pos/Payment'
-import { Receipt } from './pages/pos/Receipt'
-import { ShiftSummary } from './pages/pos/ShiftSummary'
+const Login           = lazy(() => import('./pages/auth/Login')                    .then(m => ({ default: m.Login })))
+const PinLock         = lazy(() => import('./pages/auth/PinLock')                  .then(m => ({ default: m.PinLock })))
 
-import { Dashboard } from './pages/dashboard/Dashboard'
+const POSTerminal     = lazy(() => import('./pages/pos/POSTerminal')               .then(m => ({ default: m.POSTerminal })))
+const Payment         = lazy(() => import('./pages/pos/Payment')                   .then(m => ({ default: m.Payment })))
+const Receipt         = lazy(() => import('./pages/pos/Receipt')                   .then(m => ({ default: m.Receipt })))
+const ShiftSummary    = lazy(() => import('./pages/pos/ShiftSummary')              .then(m => ({ default: m.ShiftSummary })))
 
-import { TransactionList } from './pages/transactions/TransactionList'
-import { TransactionDetail } from './pages/transactions/TransactionDetail'
+const Dashboard       = lazy(() => import('./pages/dashboard/Dashboard')           .then(m => ({ default: m.Dashboard })))
 
-import { Returns } from './pages/returns/Returns'
+const TransactionList   = lazy(() => import('./pages/transactions/TransactionList')  .then(m => ({ default: m.TransactionList })))
+const TransactionDetail = lazy(() => import('./pages/transactions/TransactionDetail').then(m => ({ default: m.TransactionDetail })))
 
-import { InventoryList } from './pages/inventory/InventoryList'
-import { ProductForm } from './pages/inventory/ProductForm'
-import { ProductDetail } from './pages/inventory/ProductDetail'
-import { StockAdjustments } from './pages/inventory/StockAdjustments'
-import { LowStock } from './pages/inventory/LowStock'
+const Returns           = lazy(() => import('./pages/returns/Returns')               .then(m => ({ default: m.Returns })))
 
-import { SalesReport } from './pages/reports/SalesReport'
-import { StaffReport } from './pages/reports/StaffReport'
-import { FinancialReport } from './pages/reports/FinancialReport'
-import { InventoryReport } from './pages/reports/InventoryReport'
+const InventoryList     = lazy(() => import('./pages/inventory/InventoryList')       .then(m => ({ default: m.InventoryList })))
+const ProductForm       = lazy(() => import('./pages/inventory/ProductForm')         .then(m => ({ default: m.ProductForm })))
+const ProductDetail     = lazy(() => import('./pages/inventory/ProductDetail')       .then(m => ({ default: m.ProductDetail })))
+const StockAdjustments  = lazy(() => import('./pages/inventory/StockAdjustments')   .then(m => ({ default: m.StockAdjustments })))
+const LowStock          = lazy(() => import('./pages/inventory/LowStock')            .then(m => ({ default: m.LowStock })))
 
-import { StaffList } from './pages/staff/StaffList'
-import { StaffDetail } from './pages/staff/StaffDetail'
-import { StaffForm } from './pages/staff/StaffForm'
+const SalesReport       = lazy(() => import('./pages/reports/SalesReport')           .then(m => ({ default: m.SalesReport })))
+const StaffReport       = lazy(() => import('./pages/reports/StaffReport')           .then(m => ({ default: m.StaffReport })))
+const FinancialReport   = lazy(() => import('./pages/reports/FinancialReport')       .then(m => ({ default: m.FinancialReport })))
+const InventoryReport   = lazy(() => import('./pages/reports/InventoryReport')       .then(m => ({ default: m.InventoryReport })))
 
-import { Settings } from './pages/settings/Settings'
-import { Branches } from './pages/settings/Branches'
-import { Categories } from './pages/settings/Categories'
-import { Vouchers } from './pages/settings/Vouchers'
-import { SyncLog } from './pages/settings/SyncLog'
+const StaffList         = lazy(() => import('./pages/staff/StaffList')               .then(m => ({ default: m.StaffList })))
+const StaffDetail       = lazy(() => import('./pages/staff/StaffDetail')             .then(m => ({ default: m.StaffDetail })))
+const StaffForm         = lazy(() => import('./pages/staff/StaffForm')               .then(m => ({ default: m.StaffForm })))
 
-import { AuditLog } from './pages/audit/AuditLog'
+const Settings          = lazy(() => import('./pages/settings/Settings')             .then(m => ({ default: m.Settings })))
+const Branches          = lazy(() => import('./pages/settings/Branches')             .then(m => ({ default: m.Branches })))
+const Categories        = lazy(() => import('./pages/settings/Categories')           .then(m => ({ default: m.Categories })))
+const Vouchers          = lazy(() => import('./pages/settings/Vouchers')             .then(m => ({ default: m.Vouchers })))
+const SyncLog           = lazy(() => import('./pages/settings/SyncLog')              .then(m => ({ default: m.SyncLog })))
+
+const AuditLog          = lazy(() => import('./pages/audit/AuditLog')                .then(m => ({ default: m.AuditLog })))
+
+// ── Page loader shown while a lazy chunk is downloading ───────────────────────
+function PageLoader() {
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-8 h-8 border-[3px] border-brand border-t-transparent rounded-full animate-spin" />
+        <span className="text-xs text-gray-400 font-medium">Loading…</span>
+      </div>
+    </div>
+  )
+}
 
 // ── Error boundary resets on every route change via the key prop ──────────────
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
@@ -57,12 +72,18 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
           <div className="text-center max-w-sm">
             <div className="w-14 h-14 bg-brand-pale rounded-2xl flex items-center justify-center mx-auto mb-4">
               <svg className="w-7 h-7 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
               </svg>
             </div>
             <h2 className="text-xl font-black text-gray-900 mb-2">Something went wrong</h2>
-            <p className="text-sm text-gray-400 mb-6 font-mono break-all">{(this.state.error as Error).message}</p>
-            <button onClick={() => { this.setState({ error: null }); window.location.reload() }} className="btn-primary px-6 py-2.5 mx-auto">
+            <p className="text-sm text-gray-400 mb-6 font-mono break-all">
+              {(this.state.error as Error).message}
+            </p>
+            <button
+              onClick={() => { this.setState({ error: null }); window.location.reload() }}
+              className="btn-primary px-6 py-2.5 mx-auto"
+            >
               Reload
             </button>
           </div>
@@ -74,62 +95,63 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
 }
 
 // Wrapper so the ErrorBoundary gets a new key on every pathname change
-// This forces it to unmount/remount, clearing any caught error
 function BoundedRoutes() {
   const location = useLocation()
   return (
     <ErrorBoundary key={location.pathname}>
-      <Routes>
-        {/* Auth */}
-        <Route path="/login" element={<Login />} />
-        <Route element={<AuthLayout />}>
-          <Route path="/pin" element={<PinLock />} />
-        </Route>
+      <Suspense fallback={<PageLoader />}>
+        <Routes>
+          {/* Auth */}
+          <Route path="/login" element={<Login />} />
+          <Route element={<AuthLayout />}>
+            <Route path="/pin" element={<PinLock />} />
+          </Route>
 
-        {/* POS Terminal — full screen, no sidebar */}
-        <Route path="/pos" element={<RequireAuth><POSLayout><POSTerminal /></POSLayout></RequireAuth>} />
-        <Route path="/pos/payment" element={<RequireAuth><div className="min-h-screen bg-gray-50"><Payment /></div></RequireAuth>} />
-        <Route path="/pos/receipt/:id" element={<RequireAuth><div className="min-h-screen bg-gray-50 p-5"><Receipt /></div></RequireAuth>} />
+          {/* POS Terminal — full screen, no sidebar */}
+          <Route path="/pos"             element={<RequireAuth><POSLayout><POSTerminal /></POSLayout></RequireAuth>} />
+          <Route path="/pos/payment"     element={<RequireAuth><div className="min-h-screen bg-gray-50"><Payment /></div></RequireAuth>} />
+          <Route path="/pos/receipt/:id" element={<RequireAuth><div className="min-h-screen bg-gray-50 p-5"><Receipt /></div></RequireAuth>} />
 
-        {/* Management pages with sidebar */}
-        <Route element={<RequireAuth><AppLayout /></RequireAuth>}>
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/pos/shift" element={<ShiftSummary />} />
+          {/* Management pages with sidebar */}
+          <Route element={<RequireAuth><AppLayout /></RequireAuth>}>
+            <Route path="/dashboard"                   element={<Dashboard />} />
+            <Route path="/pos/shift"                   element={<ShiftSummary />} />
 
-          <Route path="/transactions" element={<TransactionList />} />
-          <Route path="/transactions/:id" element={<TransactionDetail />} />
+            <Route path="/transactions"                element={<TransactionList />} />
+            <Route path="/transactions/:id"            element={<TransactionDetail />} />
 
-          <Route path="/returns" element={<Returns />} />
+            <Route path="/returns"                     element={<Returns />} />
 
-          <Route path="/inventory" element={<InventoryList />} />
-          <Route path="/inventory/add" element={<ProductForm />} />
-          <Route path="/inventory/edit/:id" element={<ProductForm />} />
-          <Route path="/inventory/adjustments" element={<StockAdjustments />} />
-          <Route path="/inventory/low-stock" element={<LowStock />} />
-          <Route path="/inventory/:id" element={<ProductDetail />} />
+            <Route path="/inventory"                   element={<InventoryList />} />
+            <Route path="/inventory/add"               element={<ProductForm />} />
+            <Route path="/inventory/edit/:id"          element={<ProductForm />} />
+            <Route path="/inventory/adjustments"       element={<StockAdjustments />} />
+            <Route path="/inventory/low-stock"         element={<LowStock />} />
+            <Route path="/inventory/:id"               element={<ProductDetail />} />
 
-          <Route path="/reports/sales" element={<SalesReport />} />
-          <Route path="/reports/staff" element={<StaffReport />} />
-          <Route path="/reports/financial" element={<FinancialReport />} />
-          <Route path="/reports/inventory" element={<InventoryReport />} />
+            <Route path="/reports/sales"               element={<SalesReport />} />
+            <Route path="/reports/staff"               element={<StaffReport />} />
+            <Route path="/reports/financial"           element={<FinancialReport />} />
+            <Route path="/reports/inventory"           element={<InventoryReport />} />
 
-          <Route path="/staff" element={<StaffList />} />
-          <Route path="/staff/new" element={<StaffForm />} />
-          <Route path="/staff/:id" element={<StaffDetail />} />
-          <Route path="/staff/edit/:id" element={<StaffForm />} />
+            <Route path="/staff"                       element={<StaffList />} />
+            <Route path="/staff/new"                   element={<StaffForm />} />
+            <Route path="/staff/:id"                   element={<StaffDetail />} />
+            <Route path="/staff/edit/:id"              element={<StaffForm />} />
 
-          <Route path="/settings" element={<Settings />} />
-          <Route path="/settings/branches" element={<Branches />} />
-          <Route path="/settings/categories" element={<Categories />} />
-          <Route path="/settings/vouchers" element={<Vouchers />} />
-          <Route path="/settings/sync-log" element={<SyncLog />} />
+            <Route path="/settings"                    element={<Settings />} />
+            <Route path="/settings/branches"           element={<Branches />} />
+            <Route path="/settings/categories"         element={<Categories />} />
+            <Route path="/settings/vouchers"           element={<Vouchers />} />
+            <Route path="/settings/sync-log"           element={<SyncLog />} />
 
-          <Route path="/audit" element={<AuditLog />} />
-        </Route>
+            <Route path="/audit"                       element={<AuditLog />} />
+          </Route>
 
-        <Route path="/" element={<Navigate to="/login" replace />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
-      </Routes>
+          <Route path="/"  element={<Navigate to="/login" replace />} />
+          <Route path="*"  element={<Navigate to="/login" replace />} />
+        </Routes>
+      </Suspense>
     </ErrorBoundary>
   )
 }
