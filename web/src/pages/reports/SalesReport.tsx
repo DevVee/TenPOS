@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Download, TrendingUp, Loader2 } from 'lucide-react'
+import { downloadCSV } from '../../lib/csvExport'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatCard } from '../../components/ui/StatCard'
 import { DollarSign, ShoppingBag } from 'lucide-react'
@@ -78,6 +79,14 @@ export function SalesReport() {
     count: Number(m.count),
   }))
 
+  const handleExport = () => {
+    downloadCSV(
+      `sales-report-${period}-${new Date().toISOString().slice(0, 10)}`,
+      ['Product', 'Category', 'Units Sold', 'Revenue'],
+      topProducts.map((p) => [p.product_name, p.category_name ?? '', p.quantity_sold, p.revenue])
+    )
+  }
+
   return (
     <div>
       <PageHeader
@@ -94,7 +103,7 @@ export function SalesReport() {
                 >{t}</button>
               ))}
             </div>
-            <button className="btn-secondary flex items-center gap-1.5"><Download className="w-4 h-4" /> Export</button>
+            <button onClick={handleExport} className="btn-secondary flex items-center gap-1.5"><Download className="w-4 h-4" /> Export</button>
           </div>
         }
       />

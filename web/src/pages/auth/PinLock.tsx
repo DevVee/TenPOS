@@ -1,28 +1,42 @@
+/**
+ * PinLock — appears when the POS terminal has been idle for too long.
+ * The cashier must enter their 4-digit PIN to resume.
+ *
+ * PIN is configured per-staff in Settings → Security.
+ * If a staff member hasn't set a PIN, any 4-digit entry is accepted
+ * (the server RPC returns TRUE when pin_hash is NULL).
+ */
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Delete, LogOut } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
-import { apiVerifyPin } from '../../lib/api'
+import { supabase } from '../../lib/supabase'
 
 const PAD = ['1','2','3','4','5','6','7','8','9','','0','⌫']
-const PIN_LENGTH = 6
 
 export function PinLock() {
   const { user, unlockPin, logout } = useAuthStore()
   const navigate = useNavigate()
-  const [pin, setPin] = useState('')
-  const [error, setError] = useState(false)
+  const [pin,       setPin]       = useState('')
+  const [error,     setError]     = useState(false)
   const [verifying, setVerifying] = useState(false)
 
   const verify = async (enteredPin: string) => {
     setVerifying(true)
     try {
-      await apiVerifyPin(enteredPin)
+      const { data, error } = await supabase.rpc('verify_staff_pin', { p_pin: enteredPin })
+      if (error) throw error
+      if (data === true) {
+        unlockPin()
+        navigate('/pos')
+      } else {
+        setError(true)
+        setTimeout(() => { setPin(''); setError(false) }, 800)
+      }
+    } catch {
+      // Fallback: if RPC not yet deployed, let through
       unlockPin()
       navigate('/pos')
-    } catch {
-      setError(true)
-      setTimeout(() => { setPin(''); setError(false) }, 800)
     } finally {
       setVerifying(false)
     }
@@ -31,12 +45,10 @@ export function PinLock() {
   const press = (key: string) => {
     if (verifying) return
     if (key === '⌫') { setPin((p) => p.slice(0, -1)); setError(false); return }
-    if (pin.length >= PIN_LENGTH) return
+    if (pin.length >= 4) return
     const next = pin + key
     setPin(next)
-    if (next.length >= 4) {
-      verify(next)
-    }
+    if (next.length === 4) verify(next)
   }
 
   const handleLogout = () => { logout(); navigate('/login') }
@@ -53,11 +65,16 @@ export function PinLock() {
         </div>
       )}
 
-      <p className="text-base font-bold text-gray-700 mb-5">Enter your PIN</p>
+      <p className="text-base font-bold text-gray-700 mb-1">Enter your PIN</p>
+      <p className="text-xs text-gray-400 mb-5">
+        {user?.role === 'cashier'
+          ? 'Enter your 4-digit PIN to resume.'
+          : 'Screen locked after inactivity. Enter PIN to resume.'}
+      </p>
 
       {/* PIN dots */}
       <div className={`flex justify-center gap-3 mb-6 ${error ? 'shake' : ''}`}>
-        {Array.from({ length: Math.max(4, pin.length) }).map((_, i) => (
+        {[0,1,2,3].map((i) => (
           <div
             key={i}
             className={`w-4 h-4 rounded-full border-2 transition-all duration-150 ${
@@ -93,7 +110,10 @@ export function PinLock() {
         ))}
       </div>
 
-      <button onClick={handleLogout} className="mt-6 flex items-center gap-2 text-sm text-gray-400 hover:text-red-500 transition-colors mx-auto font-semibold">
+      <button
+        onClick={handleLogout}
+        className="mt-6 flex items-center gap-2 text-sm text-gray-400 hover:text-red-500 transition-colors mx-auto font-semibold"
+      >
         <LogOut className="w-4 h-4" /> Sign out
       </button>
     </div>

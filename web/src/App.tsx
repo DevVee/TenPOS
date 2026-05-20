@@ -16,7 +16,6 @@ const PinLock         = lazy(() => import('./pages/auth/PinLock')               
 const POSTerminal     = lazy(() => import('./pages/pos/POSTerminal')               .then(m => ({ default: m.POSTerminal })))
 const Payment         = lazy(() => import('./pages/pos/Payment')                   .then(m => ({ default: m.Payment })))
 const Receipt         = lazy(() => import('./pages/pos/Receipt')                   .then(m => ({ default: m.Receipt })))
-const ShiftSummary    = lazy(() => import('./pages/pos/ShiftSummary')              .then(m => ({ default: m.ShiftSummary })))
 
 const Dashboard       = lazy(() => import('./pages/dashboard/Dashboard')           .then(m => ({ default: m.Dashboard })))
 
@@ -115,8 +114,6 @@ function BoundedRoutes() {
           {/* Management pages with sidebar */}
           <Route element={<RequireAuth><AppLayout /></RequireAuth>}>
             <Route path="/dashboard"                   element={<Dashboard />} />
-            <Route path="/pos/shift"                   element={<ShiftSummary />} />
-
             <Route path="/transactions"                element={<TransactionList />} />
             <Route path="/transactions/:id"            element={<TransactionDetail />} />
 

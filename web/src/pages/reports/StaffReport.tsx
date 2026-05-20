@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Download, Loader2 } from 'lucide-react'
+import { downloadCSV } from '../../lib/csvExport'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatCard } from '../../components/ui/StatCard'
 import { Users, TrendingUp, ShoppingBag } from 'lucide-react'
@@ -44,6 +45,14 @@ export function StaffReport() {
     txns:    s.transaction_count,
   }))
 
+  const handleExport = () => {
+    downloadCSV(
+      `staff-report-${period}-${new Date().toISOString().slice(0, 10)}`,
+      ['Staff', 'Role', 'Transactions', 'Items Sold', 'Revenue'],
+      staff.map((s) => [s.name, s.role, s.transaction_count, s.items_sold, s.revenue])
+    )
+  }
+
   return (
     <div>
       <PageHeader
@@ -60,7 +69,7 @@ export function StaffReport() {
                 >{t}</button>
               ))}
             </div>
-            <button className="btn-secondary flex items-center gap-1.5"><Download className="w-4 h-4" /> Export</button>
+            <button onClick={handleExport} className="btn-secondary flex items-center gap-1.5"><Download className="w-4 h-4" /> Export</button>
           </div>
         }
       />

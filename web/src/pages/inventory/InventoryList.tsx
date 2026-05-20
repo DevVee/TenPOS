@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Search, Plus, Download, Upload, Loader2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Badge } from '../../components/ui/Badge'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { apiGetInventory } from '../../lib/api'
 import { useApiData } from '../../hooks/useApiData'
+import { downloadCSV } from '../../lib/csvExport'
 
 function fmt(n: number) { return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2 })}` }
 
@@ -22,9 +23,11 @@ interface InventoryItem {
 }
 
 export function InventoryList() {
-  const navigate = useNavigate()
-  const [search, setSearch] = useState('')
+  const navigate   = useNavigate()
+  const importRef  = useRef<HTMLInputElement>(null)
+  const [search,   setSearch]   = useState('')
   const [category, setCategory] = useState('All')
+  const [importMsg, setImportMsg] = useState('')
 
   const { data, loading, error } = useApiData<InventoryItem[]>(
     () => apiGetInventory() as Promise<InventoryItem[]>
@@ -40,9 +43,32 @@ export function InventoryList() {
     return matchSearch && matchCat
   })
 
-  const stockValue = products.reduce((s, p) => s + Number(p.cost) * Number(p.stock), 0)
+  const stockValue    = products.reduce((s, p) => s + Number(p.cost) * Number(p.stock), 0)
   const lowStockCount = products.filter((p) => Number(p.stock) <= Number(p.reorder_point)).length
-  const totalUnits = products.reduce((s, p) => s + Number(p.stock), 0)
+  const totalUnits    = products.reduce((s, p) => s + Number(p.stock), 0)
+
+  const handleExport = () => {
+    downloadCSV(
+      `inventory-${new Date().toISOString().slice(0, 10)}`,
+      ['Product', 'SKU', 'Category', 'Cost', 'Price', 'Stock', 'Reorder Point', 'Status'],
+      filtered.map((p) => [
+        p.product_name, p.sku, p.category_name,
+        Number(p.cost), Number(p.price),
+        Number(p.stock), Number(p.reorder_point),
+        p.active ? 'Active' : 'Inactive',
+      ])
+    )
+  }
+
+  const handleImportClick = () => { importRef.current?.click() }
+
+  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImportMsg(`"${file.name}" received — CSV bulk import is coming in a future update.`)
+    setTimeout(() => setImportMsg(''), 4000)
+    e.target.value = ''
+  }
 
   return (
     <div>
@@ -51,8 +77,9 @@ export function InventoryList() {
         subtitle={loading ? 'Loading...' : `${products.length} products · Stock value ${fmt(stockValue)}`}
         actions={
           <div className="flex gap-2">
-            <button className="btn-secondary flex items-center gap-1.5"><Upload className="w-4 h-4" /> Import CSV</button>
-            <button className="btn-secondary flex items-center gap-1.5"><Download className="w-4 h-4" /> Export</button>
+            <input ref={importRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleImportFile} />
+            <button onClick={handleImportClick} className="btn-secondary flex items-center gap-1.5"><Upload className="w-4 h-4" /> Import CSV</button>
+            <button onClick={handleExport} className="btn-secondary flex items-center gap-1.5"><Download className="w-4 h-4" /> Export</button>
             <button onClick={() => navigate('/inventory/add')} className="btn-primary flex items-center gap-1.5"><Plus className="w-4 h-4" /> Add Product</button>
           </div>
         }
@@ -60,6 +87,9 @@ export function InventoryList() {
 
       {error && (
         <div className="card p-4 mb-4 text-sm text-red-600 bg-red-50 border-red-100">{error}</div>
+      )}
+      {importMsg && (
+        <div className="card p-3 mb-4 text-sm text-blue-700 bg-blue-50 border border-blue-100">{importMsg}</div>
       )}
 
       <div className="grid grid-cols-3 gap-3 mb-4">

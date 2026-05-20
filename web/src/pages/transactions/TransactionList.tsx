@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Search, Filter, Download, Loader2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Search, Filter, Download, Loader2, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Badge } from '../../components/ui/Badge'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { apiGetTransactions } from '../../lib/api'
+import { subscribeTransactions } from '../../lib/realtime'
+import { downloadCSV } from '../../lib/csvExport'
 
 function fmt(n: number) { return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2 })}` }
 
@@ -23,13 +25,18 @@ const PAGE_SIZE = 20
 
 export function TransactionList() {
   const navigate = useNavigate()
-  const [search, setSearch] = useState('')
+  const [search, setSearch]             = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
-  const [page, setPage] = useState(1)
+  const [page, setPage]                 = useState(1)
   const [transactions, setTransactions] = useState<Transaction[]>([])
-  const [total, setTotal] = useState(0)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const [total, setTotal]               = useState(0)
+  const [loading, setLoading]           = useState(true)
+  const [error, setError]               = useState('')
+
+  // Date range filter
+  const [showDateFilter, setShowDateFilter] = useState(false)
+  const [dateFrom, setDateFrom]             = useState('')
+  const [dateTo, setDateTo]                 = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -42,6 +49,8 @@ export function TransactionList() {
       }
       if (statusFilter !== 'all') params.status = statusFilter
       if (search.trim()) params.search = search.trim()
+      if (dateFrom) params.from = dateFrom + 'T00:00:00'
+      if (dateTo)   params.to   = dateTo   + 'T23:59:59'
 
       const res = await apiGetTransactions(params) as { data: Transaction[]; total: number }
       setTransactions(res.data ?? [])
@@ -51,9 +60,15 @@ export function TransactionList() {
     } finally {
       setLoading(false)
     }
-  }, [search, statusFilter, page])
+  }, [search, statusFilter, page, dateFrom, dateTo])
 
   useEffect(() => { load() }, [load])
+
+  // Live updates: refresh when a new transaction is created/updated
+  useEffect(() => {
+    const unsub = subscribeTransactions(() => { load() })
+    return unsub
+  }, [load])
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
@@ -65,13 +80,34 @@ export function TransactionList() {
     return 'yellow'
   }
 
+  const handleExport = () => {
+    downloadCSV(
+      `transactions-${new Date().toISOString().slice(0, 10)}`,
+      ['Receipt #', 'Date', 'Time', 'Cashier', 'Items', 'Payment Method', 'Status', 'Total'],
+      transactions.map((t) => [
+        t.receipt_no,
+        new Date(t.created_at).toLocaleDateString('en-PH'),
+        new Date(t.created_at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }),
+        t.staff_name,
+        (t.items as unknown[]).length,
+        t.payment_method,
+        t.status,
+        Number(t.total),
+      ])
+    )
+  }
+
+  const clearDateFilter = () => {
+    setDateFrom(''); setDateTo(''); setPage(1)
+  }
+
   return (
     <div>
       <PageHeader
         title="Transactions"
         subtitle="All sales, voids, and returns"
         actions={
-          <button className="btn-secondary flex items-center gap-1.5">
+          <button onClick={handleExport} className="btn-secondary flex items-center gap-1.5">
             <Download className="w-4 h-4" /> Export
           </button>
         }
@@ -102,10 +138,48 @@ export function TransactionList() {
             </button>
           ))}
         </div>
-        <button className="btn-secondary flex items-center gap-1.5">
-          <Filter className="w-4 h-4" /> Date Range
+        <button
+          onClick={() => setShowDateFilter((v) => !v)}
+          className={`btn-secondary flex items-center gap-1.5 ${showDateFilter ? 'bg-brand-pale border-brand/30 text-brand' : ''}`}
+        >
+          <Filter className="w-4 h-4" />
+          {dateFrom || dateTo ? `${dateFrom || '…'} → ${dateTo || '…'}` : 'Date Range'}
+          {(dateFrom || dateTo) && (
+            <span onClick={(e) => { e.stopPropagation(); clearDateFilter() }} className="ml-1 hover:text-brand">
+              <X className="w-3 h-3" />
+            </span>
+          )}
         </button>
       </div>
+
+      {/* Date range row */}
+      {showDateFilter && (
+        <div className="flex flex-wrap items-center gap-3 mb-4 bg-white border border-gray-200 rounded-xl px-4 py-3">
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-semibold text-gray-500 w-8">From</label>
+            <input
+              type="date"
+              className="input-base py-1.5 text-sm"
+              value={dateFrom}
+              onChange={(e) => { setDateFrom(e.target.value); setPage(1) }}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-semibold text-gray-500 w-4">To</label>
+            <input
+              type="date"
+              className="input-base py-1.5 text-sm"
+              value={dateTo}
+              onChange={(e) => { setDateTo(e.target.value); setPage(1) }}
+            />
+          </div>
+          {(dateFrom || dateTo) && (
+            <button onClick={clearDateFilter} className="text-xs text-gray-400 hover:text-brand underline">
+              Clear
+            </button>
+          )}
+        </div>
+      )}
 
       {error && (
         <div className="card p-4 mb-4 text-sm text-red-600 bg-red-50 border-red-100">{error}</div>

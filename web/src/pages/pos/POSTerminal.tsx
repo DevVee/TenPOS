@@ -6,6 +6,7 @@ import type { Product, CartItem } from '../../types'
 import { useNavigate } from 'react-router-dom'
 import { db, type CachedProduct, type CachedInventory } from '../../lib/db'
 import { refreshProductCache, refreshInventoryCache, onSyncEvent } from '../../lib/sync'
+import { subscribeProducts, subscribeStock } from '../../lib/realtime'
 
 const CATEGORY_ICONS: Record<string, ElementType> = {
   'Large Schoolbag':  ShoppingBag,
@@ -56,7 +57,15 @@ export function POSTerminal() {
     bootstrap()
     const u1 = onSyncEvent('sync:done', reload)
     const u2 = onSyncEvent('offline:queued', reload)
-    return () => { alive = false; u1(); u2() }
+    const u3 = subscribeProducts(async () => {
+      await refreshProductCache()
+      await reload()
+    })
+    const u4 = subscribeStock(async () => {
+      await refreshInventoryCache()
+      await reload()
+    })
+    return () => { alive = false; u1(); u2(); u3(); u4() }
   }, [])
 
   const products = useMemo(() => cachedProducts.map((p) => toProduct(p, inventory)), [cachedProducts, inventory])

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Download, Printer, Loader2, TrendingUp, TrendingDown, DollarSign, ShoppingBag } from 'lucide-react'
+import { downloadCSV } from '../../lib/csvExport'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatCard } from '../../components/ui/StatCard'
 import { apiFinancialReport } from '../../lib/api'
@@ -44,6 +45,26 @@ export function FinancialReport() {
     cash: '#27AE60', gcash: '#2980B9', card: '#6B7280', paymaya: '#8E44AD',
   }
 
+  const handlePrint = () => window.print()
+
+  const handleExport = () => {
+    const d = data
+    downloadCSV(
+      `financial-report-${date}`,
+      ['Metric', 'Value'],
+      [
+        ['Date', date],
+        ['Revenue', d?.revenue ?? 0],
+        ['COGS', d?.cogs ?? 0],
+        ['Gross Profit', d?.gross_profit ?? 0],
+        ['Gross Margin', `${d?.gross_margin ?? 0}%`],
+        ['Stock Value', d?.stock_value ?? 0],
+        ['Transactions', d?.transaction_count ?? 0],
+        ...payments.map((p) => [`Payment — ${p.method}`, p.total]),
+      ]
+    )
+  }
+
   return (
     <div>
       <PageHeader
@@ -57,8 +78,8 @@ export function FinancialReport() {
               onChange={(e) => setDate(e.target.value)}
               className="input-base text-sm py-2"
             />
-            <button className="btn-secondary flex items-center gap-1.5"><Printer className="w-4 h-4" /> Print</button>
-            <button className="btn-secondary flex items-center gap-1.5"><Download className="w-4 h-4" /> Export</button>
+            <button onClick={handlePrint} className="btn-secondary flex items-center gap-1.5"><Printer className="w-4 h-4" /> Print</button>
+            <button onClick={handleExport} className="btn-secondary flex items-center gap-1.5"><Download className="w-4 h-4" /> Export</button>
           </div>
         }
       />

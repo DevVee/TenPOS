@@ -2,6 +2,7 @@ import { AlertTriangle, Download, ShoppingCart, Loader2 } from 'lucide-react'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { apiGetLowStock } from '../../lib/api'
 import { useApiData } from '../../hooks/useApiData'
+import { downloadCSV } from '../../lib/csvExport'
 
 function fmt(n: number) { return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2 })}` }
 
@@ -24,13 +25,27 @@ export function LowStock() {
   const REORDER_QTY = 15
   const totalReorderCost = items.reduce((s, p) => s + Number(p.cost) * REORDER_QTY, 0)
 
+  const handleExport = () => {
+    downloadCSV(
+      `reorder-list-${new Date().toISOString().slice(0, 10)}`,
+      ['Product', 'SKU', 'Category', 'Current Stock', 'Reorder Point', 'Suggested Order', 'Unit Cost', 'Est. Order Cost'],
+      items.map((p) => [
+        p.product_name, p.sku, p.category_name,
+        Number(p.stock), Number(p.reorder_point),
+        REORDER_QTY,
+        Number(p.cost),
+        Number(p.cost) * REORDER_QTY,
+      ])
+    )
+  }
+
   return (
     <div>
       <PageHeader
         title="Low Stock Alerts"
         subtitle={loading ? 'Loading...' : `${items.length} products need reordering · Estimated cost ${fmt(totalReorderCost)}`}
         actions={
-          <button className="btn-secondary flex items-center gap-1.5">
+          <button onClick={handleExport} className="btn-secondary flex items-center gap-1.5">
             <Download className="w-4 h-4" /> Export Reorder List
           </button>
         }
@@ -87,7 +102,11 @@ export function LowStock() {
                   <div className="flex flex-col gap-2 flex-shrink-0 text-right">
                     <p className="text-xs text-gray-500">Suggested order: <strong>{REORDER_QTY} units</strong></p>
                     <p className="text-xs text-gray-400">Est. cost: {fmt(Number(p.cost) * REORDER_QTY)}</p>
-                    <button className="btn-secondary flex items-center gap-1.5 text-xs py-1.5">
+                    <button
+                      title="Purchase order module coming soon"
+                      onClick={() => alert(`Purchase order for ${p.product_name} — feature coming soon.`)}
+                      className="btn-secondary flex items-center gap-1.5 text-xs py-1.5"
+                    >
                       <ShoppingCart className="w-3.5 h-3.5" /> Create PO
                     </button>
                   </div>

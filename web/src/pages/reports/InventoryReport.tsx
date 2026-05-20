@@ -1,5 +1,6 @@
 import { Download, Loader2 } from 'lucide-react'
 import { PageHeader } from '../../components/ui/PageHeader'
+import { downloadCSV } from '../../lib/csvExport'
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
 import { StatCard } from '../../components/ui/StatCard'
 import { Package, TrendingDown, TrendingUp } from 'lucide-react'
@@ -42,13 +43,25 @@ export function InventoryReport() {
     stock: c.total_stock,
   }))
 
+  const handleExport = () => {
+    downloadCSV(
+      `inventory-report-${new Date().toISOString().slice(0, 10)}`,
+      ['Product', 'SKU', 'Category', 'Price', 'Cost', 'Stock', 'Reorder Point', 'Stock Value'],
+      stockSummary.map((p) => [
+        p.name, p.sku, p.category_name,
+        Number(p.price), Number(p.cost),
+        p.total_stock, p.reorder_point, Number(p.stock_value),
+      ])
+    )
+  }
+
   return (
     <div>
       <PageHeader
         title="Inventory Report"
         subtitle="Stock movement, turnover, and valuation"
         actions={
-          <button className="btn-secondary flex items-center gap-1.5"><Download className="w-4 h-4" /> Export</button>
+          <button onClick={handleExport} className="btn-secondary flex items-center gap-1.5"><Download className="w-4 h-4" /> Export</button>
         }
       />
 

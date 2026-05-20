@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Save, Plus, Trash2, ImagePlus, X, Loader2, Images } from 'lucide-react'
+import { ArrowLeft, Save, Plus, Trash2, ImagePlus, X, Loader2, Images, Upload } from 'lucide-react'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { apiGetProduct, apiCreateProduct, apiUpdateProduct, apiGetCategories } from '../../lib/api'
+import { supabase } from '../../lib/supabase'
 
 interface Category { id: string; name: string }
 interface Variant { label: string; value: string; priceAdj: string }
@@ -109,6 +110,8 @@ export function ProductForm() {
   const [saveError, setSaveError] = useState('')
   const [loadingData, setLoadingData] = useState(true)
   const [showGallery, setShowGallery] = useState(false)
+  const [uploading,   setUploading]   = useState(false)
+  const [uploadError, setUploadError] = useState('')
 
   useEffect(() => {
     const load = async () => {
@@ -147,15 +150,30 @@ export function ProductForm() {
     setErrors((e) => ({ ...e, [field]: '' }))
   }
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      const url = ev.target?.result as string
-      set('imageUrl', url)
+    // Reset input so the same file can be re-selected
+    e.target.value = ''
+
+    // Validate
+    if (file.size > 5 * 1024 * 1024) { setUploadError('File too large. Max 5 MB.'); return }
+    if (!file.type.startsWith('image/')) { setUploadError('Only image files are allowed.'); return }
+
+    setUploading(true)
+    setUploadError('')
+    try {
+      const ext  = file.name.split('.').pop() ?? 'jpg'
+      const path = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
+      const { error: upErr } = await supabase.storage.from('products').upload(path, file, { upsert: false })
+      if (upErr) throw upErr
+      const { data } = supabase.storage.from('products').getPublicUrl(path)
+      set('imageUrl', data.publicUrl)
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'Upload failed. Try again.')
+    } finally {
+      setUploading(false)
     }
-    reader.readAsDataURL(file)
   }
 
   const validate = () => {
@@ -257,11 +275,15 @@ export function ProductForm() {
               </div>
               <button
                 onClick={() => fileRef.current?.click()}
-                className="w-full flex items-center justify-center gap-2 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 transition-all"
+                disabled={uploading}
+                className="w-full flex items-center justify-center gap-2 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                Upload from device
+                {uploading
+                  ? <><Loader2 className="w-4 h-4 animate-spin" /> Uploading...</>
+                  : <><Upload className="w-4 h-4" /> Upload from device</>}
               </button>
               <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
+              {uploadError && <p className="text-xs text-red-500">{uploadError}</p>}
               {form.imageUrl && (
                 <button onClick={() => set('imageUrl', '')} className="w-full flex items-center justify-center gap-1.5 text-xs text-gray-400 hover:text-brand transition-colors py-1">
                   <X className="w-3.5 h-3.5" /> Remove image

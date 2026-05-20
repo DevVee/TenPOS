@@ -4,6 +4,7 @@ import { Badge } from '../../components/ui/Badge'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { apiGetAuditLog } from '../../lib/api'
 import { useApiData } from '../../hooks/useApiData'
+import { downloadCSV } from '../../lib/csvExport'
 
 interface AuditEntry {
   id: string
@@ -37,6 +38,14 @@ export function AuditLog() {
 
   const entries = data?.data ?? []
 
+  const handleExport = () => {
+    downloadCSV(
+      `audit-log-${new Date().toISOString().slice(0, 10)}`,
+      ['Severity', 'Action', 'User', 'Details', 'IP', 'Timestamp'],
+      filtered.map((a) => [a.severity, a.action, a.user, a.details, a.ip, a.timestamp])
+    )
+  }
+
   const filtered = entries.filter((a) => {
     if (!search) return true
     const q = search.toLowerCase()
@@ -53,7 +62,7 @@ export function AuditLog() {
         title="Audit Log"
         subtitle="Immutable record of all system actions"
         actions={
-          <button className="btn-secondary flex items-center gap-1.5"><Download className="w-4 h-4" /> Export Log</button>
+          <button onClick={handleExport} className="btn-secondary flex items-center gap-1.5"><Download className="w-4 h-4" /> Export Log</button>
         }
       />
 

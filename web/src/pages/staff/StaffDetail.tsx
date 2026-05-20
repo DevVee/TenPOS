@@ -39,7 +39,7 @@ const ROLE_PERMISSIONS: Record<string, [string, boolean][]> = {
     ['Manage inventory', true], ['Void transactions', true], ['Access settings', false],
   ],
   cashier: [
-    ['Process sales', true], ['View own shift', true], ['Issue receipts', true],
+    ['Process sales', true], ['View own sales', true], ['Issue receipts', true],
     ['Apply pre-set discounts', true], ['Access analytics', false], ['Void transactions', false],
   ],
   viewer: [
