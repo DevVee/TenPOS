@@ -3,11 +3,18 @@ import { Save, Check, Store, Receipt, Shield, RefreshCw, Clock, Printer, Package
 import { PageHeader } from '../../components/ui/PageHeader'
 import { useSettingsStore } from '../../store/settingsStore'
 
+/**
+ * Toggle — pill switch.
+ * Uses stopPropagation so a parent <div onClick> can also handle the toggle
+ * without the click firing twice (which would cancel itself out).
+ */
 function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <button
       type="button"
-      onClick={() => onChange(!checked)}
+      role="switch"
+      aria-checked={checked}
+      onClick={(e) => { e.stopPropagation(); onChange(!checked) }}
       className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${checked ? 'bg-brand' : 'bg-gray-200'}`}
     >
       <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${checked ? 'translate-x-5' : 'translate-x-0.5'}`} />
@@ -142,13 +149,13 @@ export function Settings() {
                   <input className="input-base" value={form.receiptFooter} onChange={(e) => set('receiptFooter', e.target.value)} />
                   <p className="text-xs text-gray-400 mt-1">Appears at the bottom — e.g. "Thank you for shopping!"</p>
                 </div>
-                <label className="flex items-center gap-3 cursor-pointer pt-1">
+                <div className="flex items-center gap-3 cursor-pointer" onClick={() => set('receiptShowLogo', !form.receiptShowLogo)}>
                   <Toggle checked={form.receiptShowLogo} onChange={(v) => set('receiptShowLogo', v)} />
                   <div>
                     <p className="text-sm font-medium text-gray-700">Show logo on receipt</p>
                     <p className="text-xs text-gray-400 mt-0.5">Print store logo at the top of the receipt</p>
                   </div>
-                </label>
+                </div>
               </div>
             </div>
 
@@ -156,13 +163,13 @@ export function Settings() {
             <div className="card p-5">
               <SectionHeader icon={Printer} title="Printer Settings" />
               <div className="space-y-4">
-                <label className="flex items-center gap-3 cursor-pointer">
+                <div className="flex items-center gap-3 cursor-pointer" onClick={() => set('printerEnabled', !form.printerEnabled)}>
                   <Toggle checked={form.printerEnabled} onChange={(v) => set('printerEnabled', v)} />
                   <div>
                     <p className="text-sm font-medium text-gray-700">Thermal Printer Enabled</p>
                     <p className="text-xs text-gray-400 mt-0.5">Auto-print receipts after each completed transaction</p>
                   </div>
-                </label>
+                </div>
                 {form.printerEnabled && (
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1.5">Paper Width</label>
@@ -237,7 +244,11 @@ export function Settings() {
                     desc:  'All transaction voids need manager authorization',
                   },
                 ].map((item) => (
-                  <label key={item.key} className="flex items-start gap-3 cursor-pointer">
+                  <div
+                    key={item.key}
+                    className="flex items-start gap-3 cursor-pointer"
+                    onClick={() => set(item.key, !(form[item.key as keyof typeof form] as boolean))}
+                  >
                     <Toggle
                       checked={form[item.key as keyof typeof form] as boolean}
                       onChange={(v) => set(item.key, v)}
@@ -246,7 +257,7 @@ export function Settings() {
                       <p className="text-sm font-medium text-gray-700">{item.label}</p>
                       <p className="text-xs text-gray-400 mt-0.5">{item.desc}</p>
                     </div>
-                  </label>
+                  </div>
                 ))}
               </div>
             </div>

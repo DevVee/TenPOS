@@ -54,7 +54,7 @@ export function TransactionDetail() {
 
   if (error || !tx) {
     return (
-      <div className="max-w-2xl mx-auto">
+      <div>
         <div className="flex items-center gap-3 mb-5">
           <button onClick={() => navigate('/transactions')} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
             <ArrowLeft className="w-5 h-5" />
@@ -70,7 +70,7 @@ export function TransactionDetail() {
   })
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div>
       <div className="flex items-center justify-between mb-5">
         <div className="flex items-center gap-3">
           <button onClick={() => navigate('/transactions')} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
@@ -169,12 +169,18 @@ export function TransactionDetail() {
       </div>
 
       <div className="flex gap-2">
-        <button className="btn-secondary flex items-center gap-1.5 flex-1 justify-center">
+        <button
+          onClick={() => window.print()}
+          className="btn-secondary flex items-center gap-1.5 flex-1 justify-center"
+        >
           <Printer className="w-4 h-4" /> Reprint Receipt
         </button>
         {tx.status === 'completed' && (
           <>
-            <button className="btn-secondary flex items-center gap-1.5 flex-1 justify-center text-yellow-600 border-yellow-200 hover:bg-yellow-50">
+            <button
+              onClick={() => navigate('/returns')}
+              className="btn-secondary flex items-center gap-1.5 flex-1 justify-center text-yellow-600 border-yellow-200 hover:bg-yellow-50"
+            >
               <RotateCcw className="w-4 h-4" /> Return
             </button>
             <button

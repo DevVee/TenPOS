@@ -59,7 +59,7 @@ export function ProductDetail() {
 
   if (error || !product) {
     return (
-      <div className="max-w-3xl mx-auto">
+      <div>
         <button onClick={() => navigate('/inventory')} className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-4">
           <ArrowLeft className="w-4 h-4" /> Back to Inventory
         </button>
@@ -74,7 +74,7 @@ export function ProductDetail() {
     : null
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div>
       <div className="flex items-center justify-between mb-5">
         <div className="flex items-center gap-3">
           <button onClick={() => navigate('/inventory')} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">

@@ -81,7 +81,7 @@ export function Categories() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div>
       <PageHeader
         title="Product Categories"
         subtitle="Manage categories shown in the POS product grid"

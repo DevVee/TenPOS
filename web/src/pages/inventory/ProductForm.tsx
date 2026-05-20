@@ -221,7 +221,7 @@ export function ProductForm() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div>
       {showGallery && (
         <ImageGallery
           selected={form.imageUrl}

@@ -111,7 +111,7 @@ export function Vouchers() {
   const isExpired = (expiry: string) => new Date(expiry) < new Date()
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div>
       <PageHeader
         title="Vouchers & Promo Codes"
         subtitle="Manage discount codes that cashiers can apply at checkout"
