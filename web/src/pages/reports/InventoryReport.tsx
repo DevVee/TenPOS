@@ -74,7 +74,7 @@ export function InventoryReport() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
                   <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} tickFormatter={(v) => v >= 1000 ? `₱${(v/1000).toFixed(0)}k` : `₱${v}`} width={48} />
-                  <Tooltip formatter={(v: number) => [fmt(v), 'Value']} contentStyle={{ borderRadius: 12, fontSize: 12 }} />
+                  <Tooltip formatter={(v) => [fmt(Number(v ?? 0)), 'Value']} contentStyle={{ borderRadius: 12, fontSize: 12 }} />
                   <Bar dataKey="Value" fill="#27AE60" radius={[4, 4, 0, 0]} maxBarSize={72} />
                 </BarChart>
               </ResponsiveContainer>

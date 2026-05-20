@@ -157,7 +157,7 @@ export function SalesReport() {
                           <Cell key={i} fill={PALETTE[i % PALETTE.length]} />
                         ))}
                       </Pie>
-                      <Tooltip formatter={(v: number) => [fmt(v), 'Revenue']} />
+                      <Tooltip formatter={(v) => [fmt(Number(v ?? 0)), 'Revenue']} />
                     </PieChart>
                   </ResponsiveContainer>
                   <div className="space-y-1.5 mt-2">
@@ -188,7 +188,7 @@ export function SalesReport() {
                     <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
                     <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
                     <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} allowDecimals={false} width={28} />
-                    <Tooltip formatter={(v: number) => [v, 'Orders']} />
+                    <Tooltip formatter={(v) => [Number(v ?? 0), 'Orders']} />
                     <Bar dataKey="Orders" fill="#3B82F6" radius={[4, 4, 0, 0]} maxBarSize={48} />
                   </BarChart>
                 </ResponsiveContainer>

@@ -6,7 +6,7 @@ import { PageHeader } from '../../components/ui/PageHeader'
 import { useNavigate } from 'react-router-dom'
 import { apiSalesReport, apiGetTransactions, apiGetLowStock } from '../../lib/api'
 import {
-  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  ResponsiveContainer, XAxis, YAxis, CartesianGrid,
   Tooltip, AreaChart, Area,
 } from 'recharts'
 
@@ -132,7 +132,7 @@ export function Dashboard() {
                     <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
                     <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
                     <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} tickFormatter={(v) => v >= 1000 ? `₱${(v/1000).toFixed(0)}k` : `₱${v}`} width={44} />
-                    <Tooltip formatter={(v: number) => [fmt(v), 'Revenue']} contentStyle={{ borderRadius: 12, fontSize: 12, border: '1px solid #E5E7EB' }} />
+                    <Tooltip formatter={(v) => [fmt(Number(v ?? 0)), 'Revenue']} contentStyle={{ borderRadius: 12, fontSize: 12, border: '1px solid #E5E7EB' }} />
                     <Area type="monotone" dataKey="Revenue" stroke="#C0392B" strokeWidth={2.5} fill="url(#dashGrad)" dot={{ r: 3, fill: '#C0392B', strokeWidth: 0 }} activeDot={{ r: 5 }} />
                   </AreaChart>
                 </ResponsiveContainer>

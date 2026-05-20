@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Printer, RotateCcw, XCircle, Loader2, AlertCircle } from 'lucide-react'
 import { Badge } from '../../components/ui/Badge'

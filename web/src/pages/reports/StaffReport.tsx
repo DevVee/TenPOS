@@ -93,7 +93,7 @@ export function StaffReport() {
                     <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
                     <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
                     <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} tickFormatter={(v) => v >= 1000 ? `₱${(v/1000).toFixed(0)}k` : `₱${v}`} width={44} />
-                    <Tooltip formatter={(v: number) => [fmt(v), 'Revenue']} contentStyle={{ borderRadius: 12, fontSize: 12 }} />
+                    <Tooltip formatter={(v) => [fmt(Number(v ?? 0)), 'Revenue']} contentStyle={{ borderRadius: 12, fontSize: 12 }} />
                     <Bar dataKey="Revenue" fill="#C0392B" radius={[4, 4, 0, 0]} maxBarSize={56} />
                   </BarChart>
                 </ResponsiveContainer>
@@ -106,7 +106,7 @@ export function StaffReport() {
                     <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
                     <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
                     <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} allowDecimals={false} width={28} />
-                    <Tooltip formatter={(v: number) => [v, 'Transactions']} contentStyle={{ borderRadius: 12, fontSize: 12 }} />
+                    <Tooltip formatter={(v) => [Number(v ?? 0), 'Transactions']} contentStyle={{ borderRadius: 12, fontSize: 12 }} />
                     <Bar dataKey="Transactions" fill="#3B82F6" radius={[4, 4, 0, 0]} maxBarSize={56} />
                   </BarChart>
                 </ResponsiveContainer>

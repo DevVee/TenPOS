@@ -117,7 +117,7 @@ export function FinancialReport() {
                         <Cell key={p.method} fill={PIE_COLOR[p.method] ?? '#E5E7EB'} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(v: number) => [fmt(v), 'Revenue']} />
+                    <Tooltip formatter={(v) => [fmt(Number(v ?? 0)), 'Revenue']} />
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="space-y-4 flex flex-col justify-center">
