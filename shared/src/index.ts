@@ -1,10 +1,11 @@
 // ============================================================
-// @tenpos/shared — Main Entry Point
-// Import everything from sub-modules as they get populated
+// @tenpos/shared — Main barrel export
+// Import from '@tenpos/shared' to get everything,
+// or from '@tenpos/shared/types', '@tenpos/shared/utils', etc.
 // ============================================================
 
-export * from './types/index.js';
-export * from './constants/index.js';
-export * from './utils/index.js';
-export * from './store/index.js';
-export * from './hooks/index.js';
+export * from './types/index.js'
+export * from './constants/index.js'
+export * from './utils/index.js'
+export * from './store/index.js'
+export * from './hooks/index.js'

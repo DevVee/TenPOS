@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { CartItem, Product, ProductVariant, Payment } from '../types'
 import { submitTransaction } from '../lib/sync'
+import { calcSubtotal, calcTotal } from '@tenpos/shared'
 
 interface TransactionResult {
   receipt_no: string
@@ -87,18 +88,9 @@ export const usePOSStore = create<POSState>((set, get) => ({
   setSearch: (q) => set({ searchQuery: q }),
   setSyncStatus: (s) => set({ syncStatus: s }),
 
-  cartSubtotal: () => {
-    const { cart } = get()
-    return cart.reduce((sum, item) => {
-      const price = item.product.price + (item.variant?.priceAdjustment ?? 0)
-      return sum + price * item.quantity - item.discount
-    }, 0)
-  },
+  cartSubtotal: () => calcSubtotal(get().cart),
 
-  cartTotal: () => {
-    const subtotal = get().cartSubtotal()
-    return subtotal * 1.12
-  },
+  cartTotal: () => calcTotal(get().cartSubtotal()),
 
   checkoutCart: async (branchId, payments, discountAmount, voucherCode) => {
     const { cart } = get()

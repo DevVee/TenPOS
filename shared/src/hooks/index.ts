@@ -1,7 +1,6 @@
 // ============================================================
-// @tenpos/shared — Hooks
-// Business logic hooks: useCart, useProducts, useTransaction
-// Phase 1 will extract these from web/src/hooks/
+// @tenpos/shared — Hook exports
 // ============================================================
 
-export {};
+export { useApiData } from './useApiData.js'
+export type { UseApiDataResult } from './useApiData.js'

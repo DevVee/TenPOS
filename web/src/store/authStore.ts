@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { User } from '../types'
 import { apiMe, clearTokens, getToken } from '../lib/api'
+import { getAvatarInitials } from '@tenpos/shared'
 
 interface AuthState {
   user: User | null
@@ -38,12 +39,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
     try {
       const me = await apiMe()
-      const initials = me.name
-        .split(' ')
-        .map((n) => n[0])
-        .join('')
-        .slice(0, 2)
-        .toUpperCase()
+      const initials = getAvatarInitials(me.name)
       set({
         user: {
           id: me.id,
