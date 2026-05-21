@@ -11,13 +11,14 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.1",
-"@types/uuid": "^10.0.0",
-"lucide-react": "^1.16.0",
+    "@types/uuid": "^10.0.0",
+    "lucide-react": "^1.16.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-router-dom": "^7.15.1",
     "recharts": "^3.8.1",
     "uuid": "^14.0.0",
+    "xlsx": "^0.18.5",
     "zustand": "^5.0.13"
   },
   "devDependencies": {

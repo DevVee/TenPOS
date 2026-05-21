@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import { Download, TrendingUp, Loader2 } from 'lucide-react'
-import { downloadCSV } from '../../lib/csvExport'
+import { useState, useMemo } from 'react'
+import { Download, TrendingUp, Loader2, CalendarRange } from 'lucide-react'
+import { downloadXLSX } from '../../lib/xlsxExport'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatCard } from '../../components/ui/StatCard'
 import { DollarSign, ShoppingBag } from 'lucide-react'
@@ -11,7 +11,7 @@ import {
   Tooltip, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area,
 } from 'recharts'
 
-type Period = 'today' | 'week' | 'month' | 'year'
+type Period = 'today' | 'week' | 'month' | 'year' | 'custom'
 
 function fmt(n: number) { return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2 })}` }
 function fmtShort(n: number) { return n >= 1000 ? `₱${(n / 1000).toFixed(1)}k` : `₱${n.toFixed(0)}` }
@@ -24,12 +24,23 @@ interface SalesData {
   hourlyHeatmap?: { hour: number; revenue: number; count: number }[]
 }
 
-function periodDates(p: Period): Record<string, string> {
-  const today = new Date().toISOString().slice(0, 10)
+function isoDate(d: Date) { return d.toISOString().slice(0, 10) }
+
+function presetDates(p: Exclude<Period, 'custom'>): { from: string; to: string } {
+  const today = isoDate(new Date())
   const daysBack = { today: 0, week: 7, month: 30, year: 365 }[p]
   if (daysBack === 0) return { from: today + 'T00:00:00', to: today + 'T23:59:59' }
-  const from = new Date(Date.now() - daysBack * 86400000).toISOString().slice(0, 10)
+  const from = isoDate(new Date(Date.now() - daysBack * 86400000))
   return { from: from + 'T00:00:00', to: today + 'T23:59:59' }
+}
+
+function periodLabel(period: Period, customFrom: string, customTo: string): string {
+  if (period === 'custom') {
+    const f = new Date(customFrom + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
+    const t = new Date(customTo   + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
+    return `${f} – ${t}`
+  }
+  return { today: 'Today', week: 'Last 7 days', month: 'Last 30 days', year: 'Last 365 days' }[period] ?? ''
 }
 
 const BRAND   = '#C0392B'
@@ -48,42 +59,159 @@ function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: 
 }
 
 export function SalesReport() {
-  const [period, setPeriod] = useState<Period>('week')
+  const [period, setPeriod]         = useState<Period>('week')
+  const [customFrom, setCustomFrom] = useState(isoDate(new Date(Date.now() - 7 * 86400000)))
+  const [customTo, setCustomTo]     = useState(isoDate(new Date()))
+  const [category, setCategory]     = useState('All')
+
+  const queryDates = useMemo(() => {
+    if (period === 'custom') return { from: customFrom + 'T00:00:00', to: customTo + 'T23:59:59' }
+    return presetDates(period)
+  }, [period, customFrom, customTo])
 
   const { data, loading } = useApiData<SalesData>(
-    () => apiSalesReport(periodDates(period)) as Promise<SalesData>,
-    [period]
+    () => apiSalesReport(queryDates) as Promise<SalesData>,
+    [queryDates]
   )
 
-  const summary     = data?.summary
+  const summary      = data?.summary
   const totalRevenue = summary ? Number(summary.total_revenue) : 0
-  const totalTxns   = summary ? Number(summary.transaction_count) : 0
+  const totalTxns    = summary ? Number(summary.transaction_count) : 0
 
   const dailyData = (data?.salesByPeriod ?? []).map((p) => ({
-    date: new Date(p.date + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }),
+    date:    new Date(p.date + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }),
     Revenue: Number(p.revenue),
-    Orders: Number(p.count),
+    Orders:  Number(p.count),
   }))
 
   const hourlyData = (data?.hourlyHeatmap ?? []).map((h) => ({
-    hour: `${String(h.hour).padStart(2, '0')}:00`,
+    hour:    `${String(h.hour).padStart(2, '0')}:00`,
     Revenue: Number(h.revenue),
-    Orders: Number(h.count),
+    Orders:  Number(h.count),
   }))
 
-  const topProducts = data?.topProducts ?? []
+  const allProducts = data?.topProducts ?? []
+
+  // Client-side category filter
+  const categories = useMemo(
+    () => ['All', ...[...new Set(allProducts.map((p) => p.category_name ?? 'Uncategorized').filter(Boolean))].sort()],
+    [allProducts]
+  )
+
+  const topProducts = useMemo(
+    () => category === 'All' ? allProducts : allProducts.filter((p) => (p.category_name ?? 'Uncategorized') === category),
+    [allProducts, category]
+  )
 
   const paymentData = (data?.byPaymentMethod ?? []).map((m) => ({
-    name: m.method.charAt(0).toUpperCase() + m.method.slice(1),
+    name:  m.method.charAt(0).toUpperCase() + m.method.slice(1),
     value: Number(m.total),
     count: Number(m.count),
   }))
 
+  // ── Export ──────────────────────────────────────────────────────────────────
   const handleExport = () => {
-    downloadCSV(
-      `sales-report-${period}-${new Date().toISOString().slice(0, 10)}`,
-      ['Product', 'Category', 'Units Sold', 'Revenue'],
-      topProducts.map((p) => [p.product_name, p.category_name ?? '', p.quantity_sold, p.revenue])
+    const label   = periodLabel(period, customFrom, customTo)
+    const today   = isoDate(new Date())
+    const allProds = data?.topProducts ?? []
+    const grandRev = allProds.reduce((s, p) => s + Number(p.revenue), 0)
+
+    downloadXLSX(
+      `TenPOS-Sales-${today}`,
+      [
+        // Sheet 1: Summary KPIs
+        {
+          name: 'Summary',
+          periodLabel: label,
+          columns: [
+            { header: 'Metric',      width: 28 },
+            { header: 'Value',       type: 'text', width: 24 },
+          ],
+          rows: [
+            ['Total Revenue',        fmt(totalRevenue)],
+            ['Total Transactions',   String(totalTxns)],
+            ['Avg. Order Value',     fmt(summary ? Number(summary.avg_order_value) : 0)],
+            ['Top Product',          allProds[0]?.product_name ?? '—'],
+            ['Period',               label],
+          ],
+        },
+
+        // Sheet 2: By Day
+        {
+          name: 'By Day',
+          periodLabel: label,
+          columns: [
+            { header: 'Date',        type: 'date',   width: 18 },
+            { header: 'Revenue (₱)', type: 'money',  width: 18 },
+            { header: 'Orders',      type: 'number', width: 12 },
+          ],
+          rows: (data?.salesByPeriod ?? []).map((p) => [
+            new Date(p.date + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }),
+            Number(p.revenue),
+            Number(p.count),
+          ]),
+          totalsRow: [
+            'TOTAL',
+            (data?.salesByPeriod ?? []).reduce((s, p) => s + Number(p.revenue), 0),
+            (data?.salesByPeriod ?? []).reduce((s, p) => s + Number(p.count), 0),
+          ],
+        },
+
+        // Sheet 3: All Products
+        {
+          name: 'Products',
+          periodLabel: label,
+          columns: [
+            { header: '#',             type: 'number', width: 6 },
+            { header: 'Product Name',  width: 36 },
+            { header: 'Category',      width: 20 },
+            { header: 'Units Sold',    type: 'number', width: 12 },
+            { header: 'Revenue (₱)',   type: 'money',  width: 18 },
+            { header: 'Revenue Share', type: 'percent', width: 14 },
+          ],
+          rows: allProds.map((p, i) => [
+            i + 1,
+            p.product_name,
+            p.category_name ?? 'Uncategorized',
+            p.quantity_sold,
+            Number(p.revenue),
+            grandRev > 0 ? Number(p.revenue) / grandRev : 0,
+          ]),
+          totalsRow: [
+            '',
+            'TOTAL',
+            '',
+            allProds.reduce((s, p) => s + p.quantity_sold, 0),
+            grandRev,
+            1,
+          ],
+        },
+
+        // Sheet 4: Payment Methods
+        {
+          name: 'Payments',
+          periodLabel: label,
+          columns: [
+            { header: 'Payment Method', width: 20 },
+            { header: 'Revenue (₱)',    type: 'money',  width: 18 },
+            { header: 'Transactions',   type: 'number', width: 16 },
+            { header: '% of Total',     type: 'percent', width: 12 },
+          ],
+          rows: (data?.byPaymentMethod ?? []).map((m) => [
+            m.method.charAt(0).toUpperCase() + m.method.slice(1),
+            Number(m.total),
+            Number(m.count),
+            totalRevenue > 0 ? Number(m.total) / totalRevenue : 0,
+          ]),
+          totalsRow: [
+            'TOTAL',
+            totalRevenue,
+            totalTxns,
+            1,
+          ],
+        },
+      ],
+      'Sales Report'
     )
   }
 
@@ -93,17 +221,56 @@ export function SalesReport() {
         title="Sales Report"
         subtitle="Revenue analysis and trends"
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2 items-center">
+            {/* Period tabs */}
             <div className="flex rounded-xl border border-gray-200 overflow-hidden text-xs">
-              {(['today', 'week', 'month', 'year'] as Period[]).map((t) => (
+              {(['today', 'week', 'month', 'year', 'custom'] as Period[]).map((t) => (
                 <button
                   key={t}
                   onClick={() => setPeriod(t)}
                   className={`px-3 py-2 font-bold capitalize transition-colors ${t === period ? 'bg-brand text-white' : 'text-gray-500 hover:bg-gray-50'}`}
-                >{t}</button>
+                >
+                  {t === 'custom' ? <CalendarRange className="w-3.5 h-3.5 inline -mt-0.5" /> : t}
+                </button>
               ))}
             </div>
-            <button onClick={handleExport} className="btn-secondary flex items-center gap-1.5"><Download className="w-4 h-4" /> Export</button>
+
+            {/* Custom date range — visible only when custom tab active */}
+            {period === 'custom' && (
+              <div className="flex items-center gap-1.5 text-xs">
+                <input
+                  type="date"
+                  value={customFrom}
+                  max={customTo}
+                  onChange={(e) => setCustomFrom(e.target.value)}
+                  className="input-base py-1.5 text-xs"
+                />
+                <span className="text-gray-400">to</span>
+                <input
+                  type="date"
+                  value={customTo}
+                  min={customFrom}
+                  max={isoDate(new Date())}
+                  onChange={(e) => setCustomTo(e.target.value)}
+                  className="input-base py-1.5 text-xs"
+                />
+              </div>
+            )}
+
+            {/* Category filter */}
+            {categories.length > 2 && (
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="input-base py-1.5 text-xs pr-7"
+              >
+                {categories.map((c) => <option key={c}>{c}</option>)}
+              </select>
+            )}
+
+            <button onClick={handleExport} className="btn-secondary flex items-center gap-1.5">
+              <Download className="w-4 h-4" /> Export Excel
+            </button>
           </div>
         }
       />
@@ -115,13 +282,13 @@ export function SalesReport() {
       ) : (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-            <StatCard label="Total Revenue"   value={fmt(totalRevenue)}  icon={DollarSign} />
-            <StatCard label="Transactions"    value={String(totalTxns)}  icon={ShoppingBag} iconColor="text-blue-600" iconBg="bg-blue-50" />
+            <StatCard label="Total Revenue"    value={fmt(totalRevenue)}  icon={DollarSign} />
+            <StatCard label="Transactions"     value={String(totalTxns)}  icon={ShoppingBag} iconColor="text-blue-600" iconBg="bg-blue-50" />
             <StatCard label="Avg. Order Value" value={fmt(summary ? Number(summary.avg_order_value) : 0)} icon={TrendingUp} iconColor="text-green-600" iconBg="bg-green-50" />
             <StatCard
               label="Top Product"
-              value={topProducts[0]?.product_name?.split(' ').slice(0, 2).join(' ') ?? '—'}
-              sub={topProducts[0] ? fmt(Number(topProducts[0].revenue)) : ''}
+              value={allProducts[0]?.product_name?.split(' ').slice(0, 2).join(' ') ?? '—'}
+              sub={allProducts[0] ? fmt(Number(allProducts[0].revenue)) : ''}
               icon={TrendingUp}
               iconColor="text-purple-600"
               iconBg="bg-purple-50"
@@ -224,32 +391,38 @@ export function SalesReport() {
 
           {/* Top products table */}
           <div className="card">
-            <div className="px-4 py-3 border-b border-gray-50">
-              <p className="text-sm font-bold text-gray-800">Top Products</p>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-50">
+              <p className="text-sm font-bold text-gray-800">
+                Top Products
+                {category !== 'All' && <span className="ml-2 text-xs text-brand font-medium">· {category}</span>}
+              </p>
+              <span className="text-xs text-gray-400">{topProducts.length} products</span>
             </div>
             <table className="w-full">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-400">#</th>
                   <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-400">Product</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-400 hidden sm:table-cell">Category</th>
                   <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-400">Units</th>
                   <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-400">Revenue</th>
-                  <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-400 w-36">Share</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-400 w-36 hidden md:table-cell">Share</th>
                 </tr>
               </thead>
               <tbody>
                 {topProducts.length === 0 ? (
-                  <tr><td colSpan={5} className="px-4 py-6 text-center text-sm text-gray-300">No sales data</td></tr>
+                  <tr><td colSpan={6} className="px-4 py-6 text-center text-sm text-gray-300">No sales data</td></tr>
                 ) : (
-                  topProducts.slice(0, 10).map((p, i) => {
+                  topProducts.slice(0, 20).map((p, i) => {
                     const pct = totalRevenue > 0 ? ((Number(p.revenue) / totalRevenue) * 100).toFixed(1) : '0'
                     return (
                       <tr key={p.product_name} className="table-row">
                         <td className="px-4 py-3 text-xs font-bold text-gray-300">{i + 1}</td>
                         <td className="px-4 py-3 text-sm font-medium text-gray-700">{p.product_name}</td>
+                        <td className="px-4 py-3 text-xs text-gray-400 hidden sm:table-cell">{p.category_name ?? '—'}</td>
                         <td className="px-4 py-3 text-sm text-gray-500 text-right">{p.quantity_sold}</td>
                         <td className="px-4 py-3 text-sm font-bold text-gray-800 text-right">{fmt(Number(p.revenue))}</td>
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3 hidden md:table-cell">
                           <div className="flex items-center gap-2">
                             <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
                               <div className="h-full bg-brand rounded-full" style={{ width: `${pct}%` }} />

@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import { Download, Loader2 } from 'lucide-react'
-import { downloadCSV } from '../../lib/csvExport'
+import { useState, useMemo } from 'react'
+import { Download, Loader2, CalendarRange } from 'lucide-react'
+import { downloadXLSX } from '../../lib/xlsxExport'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatCard } from '../../components/ui/StatCard'
 import { Users, TrendingUp, ShoppingBag } from 'lucide-react'
@@ -9,8 +9,9 @@ import { useApiData } from '../../hooks/useApiData'
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
 
 function fmt(n: number) { return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2 })}` }
+function isoDate(d: Date) { return d.toISOString().slice(0, 10) }
 
-type Period = 'today' | 'week' | 'month'
+type Period = 'today' | 'week' | 'month' | 'custom'
 
 interface StaffPerf {
   staff_id: string; name: string; role: string
@@ -18,38 +19,118 @@ interface StaffPerf {
 }
 interface StaffData { staffPerformance: StaffPerf[] }
 
-function periodDates(p: Period): Record<string, string> {
-  const today = new Date().toISOString().slice(0, 10)
+function presetDates(p: Exclude<Period, 'custom'>): Record<string, string> {
+  const today = isoDate(new Date())
   const daysBack = { today: 0, week: 7, month: 30 }[p]
   if (daysBack === 0) return { from: today + 'T00:00:00', to: today + 'T23:59:59' }
-  const from = new Date(Date.now() - daysBack * 86400000).toISOString().slice(0, 10)
+  const from = isoDate(new Date(Date.now() - daysBack * 86400000))
   return { from: from + 'T00:00:00', to: today + 'T23:59:59' }
 }
 
+function periodLabel(period: Period, from: string, to: string): string {
+  if (period === 'custom') {
+    const f = new Date(from + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
+    const t = new Date(to   + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
+    return `${f} – ${t}`
+  }
+  return { today: 'Today', week: 'Last 7 days', month: 'Last 30 days' }[period] ?? ''
+}
+
 export function StaffReport() {
-  const [period, setPeriod] = useState<Period>('week')
+  const [period,      setPeriod]      = useState<Period>('week')
+  const [customFrom,  setCustomFrom]  = useState(isoDate(new Date(Date.now() - 7 * 86400000)))
+  const [customTo,    setCustomTo]    = useState(isoDate(new Date()))
+  const [cashierFilter, setCashierFilter] = useState('All')
+
+  const queryDates = useMemo(() => {
+    if (period === 'custom') return { from: customFrom + 'T00:00:00', to: customTo + 'T23:59:59' }
+    return presetDates(period)
+  }, [period, customFrom, customTo])
 
   const { data, loading } = useApiData<StaffData>(
-    () => apiStaffReport(periodDates(period)) as Promise<StaffData>,
-    [period]
+    () => apiStaffReport(queryDates) as Promise<StaffData>,
+    [queryDates]
   )
 
-  const staff = data?.staffPerformance ?? []
+  const allStaff = data?.staffPerformance ?? []
+
+  const cashiers = useMemo(
+    () => ['All', ...allStaff.map((s) => s.name).sort()],
+    [allStaff]
+  )
+
+  const staff = useMemo(
+    () => cashierFilter === 'All' ? allStaff : allStaff.filter((s) => s.name === cashierFilter),
+    [allStaff, cashierFilter]
+  )
+
   const totalTxns    = staff.reduce((s, m) => s + m.transaction_count, 0)
   const totalRevenue = staff.reduce((s, m) => s + m.revenue, 0)
   const best         = staff[0]
 
   const barData = staff.map((s) => ({
-    name:    s.name.split(' ')[0],
-    revenue: s.revenue,
-    txns:    s.transaction_count,
+    name:         s.name.split(' ')[0],
+    Revenue:      s.revenue,
+    Transactions: s.transaction_count,
   }))
 
+  const label = periodLabel(period, customFrom, customTo)
+
   const handleExport = () => {
-    downloadCSV(
-      `staff-report-${period}-${new Date().toISOString().slice(0, 10)}`,
-      ['Staff', 'Role', 'Transactions', 'Items Sold', 'Revenue'],
-      staff.map((s) => [s.name, s.role, s.transaction_count, s.items_sold, s.revenue])
+    const today = isoDate(new Date())
+
+    downloadXLSX(
+      `TenPOS-Staff-${today}`,
+      [
+        // Sheet 1: Per-cashier performance
+        {
+          name: 'Performance',
+          periodLabel: label,
+          columns: [
+            { header: '#',              type: 'number', width: 6 },
+            { header: 'Staff Name',     width: 26 },
+            { header: 'Role',           width: 14 },
+            { header: 'Transactions',   type: 'number', width: 14 },
+            { header: 'Items Sold',     type: 'number', width: 12 },
+            { header: 'Revenue (₱)',    type: 'money',  width: 18 },
+            { header: 'Avg Order (₱)',  type: 'money',  width: 16 },
+            { header: 'Revenue Share',  type: 'percent', width: 14 },
+          ],
+          rows: allStaff.map((s, i) => {
+            const avg = s.transaction_count > 0 ? s.revenue / s.transaction_count : 0
+            const pct = totalRevenue > 0 ? s.revenue / totalRevenue : 0
+            return [i + 1, s.name, s.role, s.transaction_count, s.items_sold, s.revenue, avg, pct]
+          }),
+          totalsRow: [
+            '', 'TEAM TOTAL', '', totalTxns,
+            allStaff.reduce((s, m) => s + m.items_sold, 0),
+            totalRevenue,
+            totalTxns > 0 ? totalRevenue / totalTxns : 0,
+            1,
+          ],
+        },
+
+        // Sheet 2: Summary
+        {
+          name: 'Summary',
+          periodLabel: label,
+          columns: [
+            { header: 'Metric', width: 28 },
+            { header: 'Value',  width: 22 },
+          ],
+          rows: [
+            ['Period',             label],
+            ['Active Cashiers',    String(allStaff.length)],
+            ['Total Transactions', String(totalTxns)],
+            ['Total Revenue',      fmt(totalRevenue)],
+            ['Team Avg Order',     fmt(totalTxns > 0 ? totalRevenue / totalTxns : 0)],
+            ['Best Performer',     best?.name ?? '—'],
+            ['Best Revenue',       best ? fmt(best.revenue) : '—'],
+            ['Best Txns',          best ? String(best.transaction_count) : '—'],
+          ],
+        },
+      ],
+      'Staff Performance Report'
     )
   }
 
@@ -59,17 +140,39 @@ export function StaffReport() {
         title="Staff Performance"
         subtitle="Sales performance per cashier"
         actions={
-          <div className="flex gap-2">
-            <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs">
-              {(['today', 'week', 'month'] as Period[]).map((t) => (
+          <div className="flex flex-wrap gap-2 items-center">
+            {/* Period tabs */}
+            <div className="flex rounded-xl border border-gray-200 overflow-hidden text-xs">
+              {(['today', 'week', 'month', 'custom'] as Period[]).map((t) => (
                 <button
                   key={t}
                   onClick={() => setPeriod(t)}
-                  className={`px-3 py-2 font-medium capitalize transition-colors ${t === period ? 'bg-brand text-white' : 'text-gray-500 hover:bg-gray-50'}`}
-                >{t}</button>
+                  className={`px-3 py-2 font-bold capitalize transition-colors ${t === period ? 'bg-brand text-white' : 'text-gray-500 hover:bg-gray-50'}`}
+                >
+                  {t === 'custom' ? <CalendarRange className="w-3.5 h-3.5 inline -mt-0.5" /> : t}
+                </button>
               ))}
             </div>
-            <button onClick={handleExport} className="btn-secondary flex items-center gap-1.5"><Download className="w-4 h-4" /> Export</button>
+
+            {/* Custom date range */}
+            {period === 'custom' && (
+              <div className="flex items-center gap-1.5 text-xs">
+                <input type="date" value={customFrom} max={customTo} onChange={(e) => setCustomFrom(e.target.value)} className="input-base py-1.5 text-xs" />
+                <span className="text-gray-400">to</span>
+                <input type="date" value={customTo} min={customFrom} max={isoDate(new Date())} onChange={(e) => setCustomTo(e.target.value)} className="input-base py-1.5 text-xs" />
+              </div>
+            )}
+
+            {/* Cashier filter */}
+            {cashiers.length > 2 && (
+              <select value={cashierFilter} onChange={(e) => setCashierFilter(e.target.value)} className="input-base py-1.5 text-xs">
+                {cashiers.map((c) => <option key={c}>{c}</option>)}
+              </select>
+            )}
+
+            <button onClick={handleExport} className="btn-secondary flex items-center gap-1.5">
+              <Download className="w-4 h-4" /> Export Excel
+            </button>
           </div>
         }
       />
@@ -81,8 +184,8 @@ export function StaffReport() {
       ) : (
         <>
           <div className="grid sm:grid-cols-3 gap-3 mb-5">
-            <StatCard label="Active Cashiers" value={String(staff.length)} icon={Users} />
-            <StatCard label="Total Transactions" value={String(totalTxns)} icon={ShoppingBag} iconColor="text-blue-600" iconBg="bg-blue-50" />
+            <StatCard label="Active Cashiers"    value={String(staff.length)} icon={Users} />
+            <StatCard label="Total Transactions" value={String(totalTxns)}   icon={ShoppingBag} iconColor="text-blue-600" iconBg="bg-blue-50" />
             <StatCard
               label="Best Performer"
               value={best?.name ?? '—'}
@@ -98,7 +201,7 @@ export function StaffReport() {
               <div className="card p-4">
                 <p className="text-sm font-bold text-gray-800 mb-4">Revenue by Cashier</p>
                 <ResponsiveContainer width="100%" height={180}>
-                  <BarChart data={barData.map((d) => ({ ...d, Revenue: d.revenue }))} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                  <BarChart data={barData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
                     <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
                     <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} tickFormatter={(v) => v >= 1000 ? `₱${(v/1000).toFixed(0)}k` : `₱${v}`} width={44} />
@@ -111,7 +214,7 @@ export function StaffReport() {
               <div className="card p-4">
                 <p className="text-sm font-bold text-gray-800 mb-4">Transactions per Cashier</p>
                 <ResponsiveContainer width="100%" height={180}>
-                  <BarChart data={barData.map((d) => ({ ...d, Transactions: d.txns }))} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                  <BarChart data={barData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
                     <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
                     <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} allowDecimals={false} width={28} />
@@ -125,7 +228,10 @@ export function StaffReport() {
 
           <div className="card overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-50">
-              <p className="text-sm font-semibold text-gray-800">Detailed Breakdown</p>
+              <p className="text-sm font-semibold text-gray-800">
+                Detailed Breakdown
+                {cashierFilter !== 'All' && <span className="ml-2 text-xs text-brand font-medium">· {cashierFilter}</span>}
+              </p>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full">
@@ -135,14 +241,13 @@ export function StaffReport() {
                     <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-400">Txns</th>
                     <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-400">Revenue</th>
                     <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-400">Avg Value</th>
-                    <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-400">Voids</th>
-                    <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-400">Returns</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-400 hidden md:table-cell">Items</th>
                     <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-400">Share</th>
                   </tr>
                 </thead>
                 <tbody>
                   {staff.length === 0 ? (
-                    <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-gray-300">No data for this period</td></tr>
+                    <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-300">No data for this period</td></tr>
                   ) : (
                     staff.map((s) => {
                       const pct = totalRevenue > 0 ? ((s.revenue / totalRevenue) * 100).toFixed(1) : '0'
@@ -156,15 +261,24 @@ export function StaffReport() {
                                   {s.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()}
                                 </span>
                               </div>
-                              <span className="text-sm font-medium text-gray-700">{s.name}</span>
+                              <div>
+                                <span className="text-sm font-medium text-gray-700">{s.name}</span>
+                                <span className="ml-2 text-xs text-gray-400 capitalize">{s.role}</span>
+                              </div>
                             </div>
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-600 text-right">{s.transaction_count}</td>
                           <td className="px-4 py-3 text-sm font-semibold text-gray-800 text-right">{fmt(s.revenue)}</td>
                           <td className="px-4 py-3 text-sm text-gray-600 text-right">{fmt(avg)}</td>
-                          <td className="px-4 py-3 text-sm text-right"><span className="text-gray-400">—</span></td>
-                          <td className="px-4 py-3 text-sm text-gray-500 text-right">—</td>
-                          <td className="px-4 py-3 text-xs text-gray-400 text-right">{pct}%</td>
+                          <td className="px-4 py-3 text-sm text-gray-500 text-right hidden md:table-cell">{s.items_sold}</td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden hidden sm:block">
+                                <div className="h-full bg-brand rounded-full" style={{ width: `${pct}%` }} />
+                              </div>
+                              <span className="text-xs text-gray-400 w-8 text-right">{pct}%</span>
+                            </div>
+                          </td>
                         </tr>
                       )
                     })

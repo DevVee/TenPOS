@@ -1,6 +1,7 @@
-import { Download, Loader2 } from 'lucide-react'
+import { useState, useMemo } from 'react'
+import { Download, Loader2, Search, AlertTriangle } from 'lucide-react'
 import { PageHeader } from '../../components/ui/PageHeader'
-import { downloadCSV } from '../../lib/csvExport'
+import { downloadXLSX } from '../../lib/xlsxExport'
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
 import { StatCard } from '../../components/ui/StatCard'
 import { Package, TrendingDown, TrendingUp } from 'lucide-react'
@@ -28,30 +29,121 @@ export function InventoryReport() {
     () => apiInventoryReport() as unknown as Promise<InvData>
   )
 
+  const [search,        setSearch]        = useState('')
+  const [category,      setCategory]      = useState('All')
+  const [lowStockOnly,  setLowStockOnly]  = useState(false)
+
   const stockSummary    = data?.stockSummary    ?? []
   const fastMovers      = data?.fastMovers      ?? []
   const stockMovement   = data?.stockMovement   ?? []
   const valueByCategory = data?.valueByCategory ?? []
 
+  // Available categories
+  const categories = useMemo(
+    () => ['All', ...[...new Set(stockSummary.map((p) => p.category_name ?? 'Uncategorized').filter(Boolean))].sort()],
+    [stockSummary]
+  )
+
+  // Filtered rows
+  const filteredStock = useMemo(() => {
+    let rows = stockSummary
+    if (category !== 'All') rows = rows.filter((p) => (p.category_name ?? 'Uncategorized') === category)
+    if (lowStockOnly)        rows = rows.filter((p) => p.total_stock <= p.reorder_point)
+    if (search.trim())       rows = rows.filter((p) =>
+      p.name.toLowerCase().includes(search.toLowerCase()) ||
+      p.sku.toLowerCase().includes(search.toLowerCase())
+    )
+    return rows
+  }, [stockSummary, category, lowStockOnly, search])
+
   const totalStockValue = stockSummary.reduce((s, p) => s + Number(p.stock_value), 0)
   const shrinkageQty    = stockMovement.find((m) => m.type === 'remove')?.total_quantity ?? 0
   const restockedQty    = stockMovement.find((m) => m.type === 'add')?.total_quantity    ?? 0
+  const lowStockCount   = stockSummary.filter((p) => p.total_stock <= p.reorder_point).length
 
   const chartData = valueByCategory.slice(0, 8).map((c) => ({
-    name: c.category?.slice(0, 12) ?? 'Other',
-    value: Number(c.total_value),
+    name:  c.category?.slice(0, 12) ?? 'Other',
+    Value: Number(c.total_value),
     stock: c.total_stock,
   }))
 
+  const today = new Date().toISOString().slice(0, 10)
+
   const handleExport = () => {
-    downloadCSV(
-      `inventory-report-${new Date().toISOString().slice(0, 10)}`,
-      ['Product', 'SKU', 'Category', 'Price', 'Cost', 'Stock', 'Reorder Point', 'Stock Value'],
-      stockSummary.map((p) => [
-        p.name, p.sku, p.category_name,
-        Number(p.price), Number(p.cost),
-        p.total_stock, p.reorder_point, Number(p.stock_value),
-      ])
+    const margin = (p: StockItem) =>
+      Number(p.cost) > 0 && Number(p.price) > 0
+        ? (Number(p.price) - Number(p.cost)) / Number(p.price)
+        : 0
+
+    downloadXLSX(
+      `TenPOS-Inventory-${today}`,
+      [
+        // Sheet 1: Stock Levels
+        {
+          name: 'Stock Levels',
+          periodLabel: `Generated ${today}`,
+          columns: [
+            { header: '#',              type: 'number', width: 6 },
+            { header: 'Product Name',   width: 36 },
+            { header: 'SKU',            width: 16 },
+            { header: 'Category',       width: 22 },
+            { header: 'Cost (₱)',       type: 'money',  width: 14 },
+            { header: 'Price (₱)',      type: 'money',  width: 14 },
+            { header: 'Margin %',       type: 'percent', width: 12 },
+            { header: 'Stock',          type: 'number', width: 10 },
+            { header: 'Reorder Point',  type: 'number', width: 14 },
+            { header: 'Status',         width: 14 },
+            { header: 'Stock Value (₱)', type: 'money', width: 18 },
+          ],
+          rows: stockSummary.map((p, i) => [
+            i + 1,
+            p.name,
+            p.sku,
+            p.category_name ?? 'Uncategorized',
+            Number(p.cost),
+            Number(p.price),
+            margin(p),
+            p.total_stock,
+            p.reorder_point,
+            p.total_stock === 0 ? 'Out of Stock' : p.total_stock <= p.reorder_point ? 'Low Stock' : 'OK',
+            Number(p.stock_value),
+          ]),
+          totalsRow: [
+            '',
+            `${stockSummary.length} products`,
+            '', '', '', '', '',
+            stockSummary.reduce((s, p) => s + p.total_stock, 0),
+            '',
+            '',
+            totalStockValue,
+          ],
+        },
+
+        // Sheet 2: Fast Movers
+        {
+          name: 'Fast Movers (30d)',
+          periodLabel: 'Last 30 days',
+          columns: [
+            { header: '#',            type: 'number', width: 6 },
+            { header: 'Product Name', width: 36 },
+            { header: 'Units Sold',   type: 'number', width: 14 },
+            { header: 'Revenue (₱)',  type: 'money',  width: 18 },
+          ],
+          rows: fastMovers.map((p, i) => [
+            i + 1,
+            p.product_name,
+            p.quantity_sold,
+            Number(p.revenue),
+          ]),
+          totalsRow: [
+            '',
+            'TOTAL',
+            fastMovers.reduce((s, p) => s + p.quantity_sold, 0),
+            fastMovers.reduce((s, p) => s + Number(p.revenue), 0),
+          ],
+        },
+      ],
+      'Inventory Report'
     )
   }
 
@@ -61,7 +153,9 @@ export function InventoryReport() {
         title="Inventory Report"
         subtitle="Stock movement, turnover, and valuation"
         actions={
-          <button onClick={handleExport} className="btn-secondary flex items-center gap-1.5"><Download className="w-4 h-4" /> Export</button>
+          <button onClick={handleExport} className="btn-secondary flex items-center gap-1.5">
+            <Download className="w-4 h-4" /> Export Excel
+          </button>
         }
       />
 
@@ -71,10 +165,11 @@ export function InventoryReport() {
         </div>
       ) : (
         <>
-          <div className="grid sm:grid-cols-3 gap-3 mb-5">
-            <StatCard label="Stock Value" value={fmt(totalStockValue)} sub="At cost price" icon={Package} />
-            <StatCard label="Restocked (30d)" value={`+${restockedQty} units`} sub="Stock additions" icon={TrendingUp} iconColor="text-green-600" iconBg="bg-green-50" />
-            <StatCard label="Removed (30d)" value={`${shrinkageQty} units`} sub="Damage / adjustments" icon={TrendingDown} iconColor="text-red-600" iconBg="bg-red-50" />
+          <div className="grid sm:grid-cols-4 gap-3 mb-5">
+            <StatCard label="Stock Value"    value={fmt(totalStockValue)} sub="At cost price"        icon={Package} />
+            <StatCard label="Restocked (30d)" value={`+${restockedQty} units`} sub="Stock additions" icon={TrendingUp}   iconColor="text-green-600" iconBg="bg-green-50" />
+            <StatCard label="Removed (30d)"  value={`${shrinkageQty} units`} sub="Damage / adjustments" icon={TrendingDown} iconColor="text-red-600"   iconBg="bg-red-50" />
+            <StatCard label="Low Stock"      value={String(lowStockCount)} sub="At or below reorder" icon={AlertTriangle} iconColor="text-yellow-600" iconBg="bg-yellow-50" />
           </div>
 
           <div className="card p-4 mb-4">
@@ -83,7 +178,7 @@ export function InventoryReport() {
               <div className="h-[200px] flex items-center justify-center text-gray-300 text-sm">No data</div>
             ) : (
               <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={chartData.map((d) => ({ ...d, Value: d.value }))} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                <BarChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
                   <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} tickFormatter={(v) => v >= 1000 ? `₱${(v/1000).toFixed(0)}k` : `₱${v}`} width={48} />
@@ -94,6 +189,102 @@ export function InventoryReport() {
             )}
           </div>
 
+          {/* ── Filters bar ─────────────────────────────────────────────── */}
+          <div className="flex flex-wrap gap-2 mb-3">
+            {/* Search */}
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search product or SKU…"
+                className="input-base pl-8 py-1.5 text-sm w-full"
+              />
+            </div>
+
+            {/* Category */}
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="input-base py-1.5 text-sm"
+            >
+              {categories.map((c) => <option key={c}>{c}</option>)}
+            </select>
+
+            {/* Low stock toggle */}
+            <button
+              onClick={() => setLowStockOnly((v) => !v)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-all ${
+                lowStockOnly
+                  ? 'bg-yellow-50 text-yellow-700 border-yellow-300'
+                  : 'bg-white text-gray-500 border-gray-200 hover:border-yellow-200 hover:text-yellow-600'
+              }`}
+            >
+              <AlertTriangle className="w-3.5 h-3.5" />
+              Low Stock Only
+            </button>
+
+            <span className="text-xs text-gray-400 self-center ml-1">{filteredStock.length} products</span>
+          </div>
+
+          {/* Stock table */}
+          <div className="card overflow-hidden mb-4">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-400">Product</th>
+                    <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-400 hidden sm:table-cell">SKU</th>
+                    <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-400 hidden md:table-cell">Category</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-400">Cost</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-400">Price</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-400">Stock</th>
+                    <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-400">Status</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-400 hidden lg:table-cell">Stock Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredStock.length === 0 ? (
+                    <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-gray-300">
+                      {lowStockOnly ? 'No low-stock products' : 'No products match filter'}
+                    </td></tr>
+                  ) : (
+                    filteredStock.map((p) => {
+                      const isLow = p.total_stock <= p.reorder_point && p.total_stock > 0
+                      const isOut = p.total_stock === 0
+                      return (
+                        <tr key={p.id} className="table-row">
+                          <td className="px-4 py-3 text-sm font-medium text-gray-700">{p.name}</td>
+                          <td className="px-4 py-3 text-xs font-mono text-gray-400 hidden sm:table-cell">{p.sku}</td>
+                          <td className="px-4 py-3 text-xs text-gray-400 hidden md:table-cell">{p.category_name}</td>
+                          <td className="px-4 py-3 text-sm text-gray-500 text-right">{fmt(Number(p.cost))}</td>
+                          <td className="px-4 py-3 text-sm font-semibold text-gray-700 text-right">{fmt(Number(p.price))}</td>
+                          <td className={`px-4 py-3 text-sm font-bold text-right ${isOut ? 'text-brand' : isLow ? 'text-yellow-600' : 'text-green-600'}`}>
+                            {p.total_stock}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`inline-flex text-xs font-semibold px-2 py-0.5 rounded-full ${
+                              isOut ? 'bg-red-50 text-brand' :
+                              isLow ? 'bg-yellow-50 text-yellow-700' :
+                                      'bg-green-50 text-green-700'
+                            }`}>
+                              {isOut ? 'Out' : isLow ? 'Low' : 'OK'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-sm font-semibold text-gray-700 text-right hidden lg:table-cell">
+                            {fmt(Number(p.stock_value))}
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Fast Movers */}
           <div className="card overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-50">
               <p className="text-sm font-semibold text-gray-800">Top Movers (Last 30 Days)</p>
