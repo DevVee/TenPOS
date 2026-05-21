@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft, Save, Plus, Trash2, ImagePlus, X, Loader2,
-  Upload, ChevronDown, Package,
+  Images, Upload, ChevronDown, Package,
 } from 'lucide-react'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { apiGetProduct, apiCreateProduct, apiUpdateProduct, apiGetCategories } from '../../lib/api'
