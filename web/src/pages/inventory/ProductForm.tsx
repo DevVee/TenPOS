@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft, Save, Plus, Trash2, ImagePlus, X, Loader2,
-  Images, Upload, ChevronDown, Package,
+  Upload, ChevronDown, Package,
 } from 'lucide-react'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { apiGetProduct, apiCreateProduct, apiUpdateProduct, apiGetCategories } from '../../lib/api'
@@ -11,29 +11,6 @@ import { supabase } from '../../lib/supabase'
 interface Category { id: string; name: string }
 interface Variant  { label: string; value: string; priceAdj: string }
 
-// Images that exist in /public/products/
-const GALLERY_IMAGES = [
-  { file: 'butterfly-large.png',  label: 'Pagasa Large Butterfly' },
-  { file: 'hearts-large.png',     label: 'Pagasa Large Hearts' },
-  { file: 'balls-large.png',      label: 'Pagasa Large Balls' },
-  { file: 'camo-large.png',       label: 'Pagasa Large Camo' },
-  { file: 'triangles-large.png',  label: 'Pagasa Large Triangles' },
-  { file: 'black-large.png',      label: 'Pagasa Large Black' },
-  { file: 'bw-weave-large.png',   label: 'Pagasa Large B&W Weave' },
-  { file: 'unicorn-large.png',    label: 'Pagasa Large Black Unicorn' },
-  { file: 'blue-camo-large.png',  label: 'Pagasa Large Blue Camo' },
-  { file: 'carnival-large.png',   label: 'Pagasa Large Carnival' },
-  { file: 'squares-large.png',    label: 'Pagasa Large Coloured Squares' },
-  { file: 'leaves-large.png',     label: 'Pagasa Large Colourful Leaves' },
-  { file: 'dalmatian-large.png',  label: 'Pagasa Large Dalmatian' },
-  { file: 'doodles-large.png',    label: 'Pagasa Large Doodles on Grey' },
-  { file: 'blue-red-large.png',   label: 'Pagasa Large Blue and Red' },
-  { file: 'dino-medium.png',      label: 'Malakas Medium Dinosaur' },
-  { file: 'dalmatian-medium.png', label: 'Malakas Medium Dalmatian' },
-  { file: 'red-medium.png',       label: 'Malakas Medium Firecracker Red' },
-  { file: 'lime-medium.png',      label: 'Malakas Medium Lime' },
-  { file: 'mustard-medium.png',   label: 'Malakas Medium Mustard' },
-]
 
 const MATERIALS = ['', 'Canvas', 'Nylon', 'Polyester', 'Leather', 'PVC', 'Oxford Cloth', 'Denim', 'Mesh', 'Suede', 'Other']
 
@@ -111,54 +88,40 @@ function ImageGallery({ selected, onSelect, onClose }: {
 
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
           <div>
-            <h3 className="font-bold text-gray-900">Choose Product Image</h3>
-            <p className="text-xs text-gray-400 mt-0.5">Select from uploads or built-in gallery</p>
+            <h3 className="font-bold text-gray-900">Product Images</h3>
+            <p className="text-xs text-gray-400 mt-0.5">Pick a previously uploaded photo</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 rounded-xl hover:bg-gray-100 text-gray-400 flex items-center justify-center transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="overflow-y-auto flex-1 p-4 space-y-5">
-
-          {/* ── Uploaded (Supabase Storage) ───────────────────────── */}
-          <div>
-            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2.5 flex items-center gap-1.5">
-              <Upload className="w-3 h-3" /> Previously Uploaded
-            </p>
-            {loadingUploads ? (
-              <div className="flex items-center gap-2 text-xs text-gray-400 py-2">
-                <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading…
-              </div>
-            ) : uploadedUrls.length === 0 ? (
-              <p className="text-xs text-gray-300 italic py-1">No uploads yet — images you upload will appear here.</p>
-            ) : (
-              <div className="grid grid-cols-4 sm:grid-cols-6 gap-2.5">
-                {uploadedUrls.map((url) => <ThumbBtn key={url} url={url} />)}
-              </div>
-            )}
-          </div>
-
-          {/* ── Built-in gallery ──────────────────────────────────── */}
-          <div>
-            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2.5 flex items-center gap-1.5">
-              <Images className="w-3 h-3" /> Built-in Gallery
-            </p>
+        <div className="overflow-y-auto flex-1 p-4">
+          {loadingUploads ? (
+            <div className="flex items-center justify-center h-32 gap-2 text-sm text-gray-400">
+              <Loader2 className="w-4 h-4 animate-spin" /> Loading uploads…
+            </div>
+          ) : uploadedUrls.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-32 gap-2 text-center">
+              <Upload className="w-8 h-8 text-gray-200" />
+              <p className="text-sm text-gray-400 font-medium">No uploads yet</p>
+              <p className="text-xs text-gray-300">Close this and use "Upload from device" to add your first image.</p>
+            </div>
+          ) : (
             <div className="grid grid-cols-4 sm:grid-cols-6 gap-2.5">
-              {/* No image option */}
+              {/* Clear selection */}
               <button
                 onClick={() => { onSelect(''); onClose() }}
                 className={`aspect-square rounded-xl border-2 flex items-center justify-center transition-all active:scale-95 ${
                   selected === '' ? 'border-brand bg-brand-pale' : 'border-dashed border-gray-200 hover:border-gray-300'
                 }`}
+                title="No image"
               >
                 <X className="w-5 h-5 text-gray-300" />
               </button>
-              {GALLERY_IMAGES.map((img) => (
-                <ThumbBtn key={img.file} url={`/products/${img.file}`} label={img.label} />
-              ))}
+              {uploadedUrls.map((url) => <ThumbBtn key={url} url={url} />)}
             </div>
-          </div>
+          )}
 
         </div>
       </div>
