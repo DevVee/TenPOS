@@ -28,7 +28,6 @@ export default defineConfig({
          *
          *  chunk-react   — React core + router (cached aggressively, rarely changes)
          *  chunk-charts  — Recharts + D3 internals (large, only loaded on report pages)
-         *  chunk-db      — Dexie (IndexedDB ORM, only loaded after login)
          *  chunk-icons   — Lucide React icon set
          *  chunk-state   — Zustand
          *  chunk-vendor  — everything else from node_modules
@@ -54,9 +53,6 @@ export default defineConfig({
             id.includes('react-router') ||
             id.includes('scheduler')
           ) return 'chunk-react'
-
-          // Dexie offline DB
-          if (id.includes('dexie')) return 'chunk-db'
 
           // Lucide icons — tree-shaken but still a big registry
           if (id.includes('lucide-react')) return 'chunk-icons'
