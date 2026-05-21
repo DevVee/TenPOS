@@ -166,10 +166,10 @@ export function InventoryReport() {
       ) : (
         <>
           <div className="grid sm:grid-cols-4 gap-3 mb-5">
-            <StatCard label="Stock Value"    value={fmt(totalStockValue)} sub="At cost price"        icon={Package} />
-            <StatCard label="Restocked (30d)" value={`+${restockedQty} units`} sub="Stock additions" icon={TrendingUp}   iconColor="text-green-600" iconBg="bg-green-50" />
-            <StatCard label="Removed (30d)"  value={`${shrinkageQty} units`} sub="Damage / adjustments" icon={TrendingDown} iconColor="text-red-600"   iconBg="bg-red-50" />
-            <StatCard label="Low Stock"      value={String(lowStockCount)} sub="At or below reorder" icon={AlertTriangle} iconColor="text-yellow-600" iconBg="bg-yellow-50" />
+            <StatCard label="Stock Value"    value={fmt(totalStockValue)} subLabel="At cost price"        icon={Package} />
+            <StatCard label="Restocked (30d)" value={`+${restockedQty} units`} subLabel="Stock additions" icon={TrendingUp}   iconColor="text-green-600" iconBg="bg-green-50" />
+            <StatCard label="Removed (30d)"  value={`${shrinkageQty} units`} subLabel="Damage / adjustments" icon={TrendingDown} iconColor="text-red-600"   iconBg="bg-red-50" />
+            <StatCard label="Low Stock"      value={String(lowStockCount)} subLabel="At or below reorder" icon={AlertTriangle} iconColor="text-yellow-600" iconBg="bg-yellow-50" />
           </div>
 
           <div className="card p-4 mb-4">

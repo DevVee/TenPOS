@@ -1,6 +1,8 @@
+import { useState, useEffect } from 'react'
 import { AlertTriangle, Download, ShoppingCart, Loader2 } from 'lucide-react'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { apiGetLowStock } from '../../lib/api'
+import { supabase } from '../../lib/supabase'
 import { useApiData } from '../../hooks/useApiData'
 import { downloadCSV } from '../../lib/csvExport'
 
@@ -17,9 +19,29 @@ interface LowStockItem {
 }
 
 export function LowStock() {
+  const [tick, setTick] = useState(0)
   const { data, loading, error } = useApiData<LowStockItem[]>(
-    () => apiGetLowStock() as Promise<LowStockItem[]>
+    () => apiGetLowStock() as Promise<LowStockItem[]>,
+    [tick],
   )
+
+  // ── Realtime: re-query whenever any stock level changes ──────────────────────
+  useEffect(() => {
+    const channel = supabase
+      .channel('low-stock-rt')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'stock_levels' },
+        () => setTick((t) => t + 1),
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'stock_levels' },
+        () => setTick((t) => t + 1),
+      )
+      .subscribe()
+    return () => { void supabase.removeChannel(channel) }
+  }, [])
 
   const items = data ?? []
   const REORDER_QTY = 15

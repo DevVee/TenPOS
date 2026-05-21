@@ -4,12 +4,24 @@
 // Pages import from here unchanged — only this file changed.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { createClient } from '@supabase/supabase-js'
 import { supabase } from './supabase'
 
 // ─── Supabase session helpers (synchronous token read) ───────────────────────
 
 const PROJECT_REF  = 'einqluaxetbcuafxkwok'
 const SESSION_KEY  = `sb-${PROJECT_REF}-auth-token`
+
+/**
+ * Separate Supabase client used ONLY for creating new auth users (signUp).
+ * persistSession: false ensures it never overwrites the admin's active session
+ * in localStorage — the new user's session is discarded after we grab their ID.
+ */
+const _signupClient = createClient(
+  import.meta.env.VITE_SUPABASE_URL as string,
+  import.meta.env.VITE_SUPABASE_ANON_KEY as string,
+  { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } },
+)
 
 export const BASE_URL = 'supabase'
 
@@ -86,14 +98,7 @@ async function addAudit(
   })
 }
 
-// ─── Receipt-number generator ─────────────────────────────────────────────────
 
-async function nextReceiptNo(): Promise<string> {
-  const { count } = await supabase
-    .from('transactions')
-    .select('*', { count: 'exact', head: true })
-  return `TEN-${String((count ?? 0) + 1001).padStart(5, '0')}`
-}
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
@@ -130,11 +135,12 @@ export async function apiLogin(usernameOrEmail: string, password: string) {
     accessToken: data.session.access_token,
     refreshToken: data.session.refresh_token,
     user: {
-      id:        (staff as StaffRow).id,
-      name:      (staff as StaffRow).name,
-      email:     (staff as StaffRow).email ?? email,
-      role:      (staff as StaffRow).role as 'admin' | 'manager' | 'cashier' | 'viewer',
-      branch_id: (staff as StaffRow).branch_id,
+      id:         (staff as StaffRow).id,
+      name:       (staff as StaffRow).name,
+      email:      (staff as StaffRow).email ?? email,
+      role:       (staff as StaffRow).role as 'admin' | 'manager' | 'cashier' | 'viewer',
+      branch_id:  (staff as StaffRow).branch_id,
+      avatar_url: (data.user.user_metadata?.avatar_url as string | undefined) ?? undefined,
     },
   }
 }
@@ -158,11 +164,12 @@ export async function apiMe() {
   _currentStaff = staff as StaffRow
 
   return {
-    id:        (staff as StaffRow).id,
-    name:      (staff as StaffRow).name,
-    email:     ((staff as StaffRow).email ?? user.email ?? '') as string,
-    role:      (staff as StaffRow).role,
-    branch_id: (staff as StaffRow).branch_id,
+    id:         (staff as StaffRow).id,
+    name:       (staff as StaffRow).name,
+    email:      ((staff as StaffRow).email ?? user.email ?? '') as string,
+    role:       (staff as StaffRow).role,
+    branch_id:  (staff as StaffRow).branch_id,
+    avatar_url: (user.user_metadata?.avatar_url as string | undefined) ?? undefined,
   }
 }
 
@@ -172,6 +179,95 @@ export async function apiMe() {
  *  authenticated), so we pass it through. */
 export async function apiVerifyPin(_pin: string) {
   return { valid: true }
+}
+
+// ─── Profile ──────────────────────────────────────────────────────────────────
+
+export async function apiUpdateProfile(data: { name?: string; email?: string }) {
+  const staff = await getCurrentStaff()
+  if (!staff) throw new Error('Not authenticated')
+
+  const updates: Record<string, string> = {}
+  if (data.name)  updates.name  = data.name
+  if (data.email) updates.email = data.email
+
+  if (Object.keys(updates).length > 0) {
+    const { error } = await supabase.from('staff').update(updates).eq('id', staff.id)
+    if (error) throw new Error('Failed to update profile: ' + error.message)
+    _currentStaff = { ..._currentStaff!, ...updates }
+  }
+
+  // Update Supabase Auth email if changed
+  if (data.email) {
+    const { error } = await supabase.auth.updateUser({ email: data.email })
+    if (error) throw new Error('Failed to update email: ' + error.message)
+  }
+
+  void addAudit('PROFILE_UPDATE', `Profile updated: ${Object.keys(updates).join(', ')}`, 'info')
+  return true
+}
+
+export async function apiChangePassword(newPassword: string) {
+  if (newPassword.length < 8) throw new Error('Password must be at least 8 characters.')
+  const { error } = await supabase.auth.updateUser({ password: newPassword })
+  if (error) throw new Error(error.message)
+  void addAudit('PASSWORD_CHANGE', 'User changed their password', 'warning')
+  return true
+}
+
+/**
+ * Upload a profile picture to Supabase Storage (bucket: "avatars", public).
+ * The URL is saved in Supabase Auth user_metadata so it survives across
+ * devices and browser clears.
+ *
+ * Prerequisites — run once in the Supabase dashboard:
+ *   Storage → New bucket → name: "avatars", Public: ON
+ *   Policy: allow authenticated users to upload to their own folder.
+ */
+export async function apiUploadAvatar(file: File): Promise<string> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Not authenticated')
+
+  const ext  = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+  const path = `${user.id}/avatar.${ext}`
+
+  const { error: uploadErr } = await supabase.storage
+    .from('avatars')
+    .upload(path, file, { upsert: true, contentType: file.type })
+
+  if (uploadErr) {
+    // Surface a friendly message when the bucket simply doesn't exist yet
+    if (uploadErr.message.includes('Bucket not found') || uploadErr.message.includes('not found')) {
+      throw new Error(
+        'Storage bucket "avatars" not found. Create a public bucket named "avatars" in your Supabase dashboard → Storage.'
+      )
+    }
+    throw new Error('Upload failed: ' + uploadErr.message)
+  }
+
+  // Public URL + cache-bust so the browser fetches the new image immediately
+  const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path)
+  const avatarUrl = `${publicUrl}?v=${Date.now()}`
+
+  // Persist in Auth metadata — survives sessions, syncs across devices
+  await supabase.auth.updateUser({ data: { avatar_url: avatarUrl } })
+
+  void addAudit('AVATAR_UPDATE', 'User updated profile photo', 'info')
+  return avatarUrl
+}
+
+export async function apiRemoveAvatar(): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return
+
+  // Try to remove common extensions — ignore errors (file may not exist)
+  await supabase.storage.from('avatars')
+    .remove(['jpg', 'png', 'gif', 'webp', 'jpeg'].map((e) => `${user.id}/avatar.${e}`))
+    .catch(() => {})
+
+  // Clear from Auth metadata
+  await supabase.auth.updateUser({ data: { avatar_url: null } })
+  void addAudit('AVATAR_REMOVE', 'User removed profile photo', 'info')
 }
 
 // ─── Products ─────────────────────────────────────────────────────────────────
@@ -541,7 +637,14 @@ export async function apiGetTransactions(params?: Record<string, string>) {
   if (params?.to)     q = q.lte('created_at', params.to)
   if (params?.search) {
     const s = params.search
-    q = q.ilike('receipt_no', `%${s}%`)
+    // Also match cashier name: find all matching staff IDs first, then OR with receipt_no
+    const { data: matchingStaff } = await supabase.from('staff').select('id').ilike('name', `%${s}%`)
+    const staffIds = ((matchingStaff ?? []) as { id: string }[]).map((st) => st.id)
+    if (staffIds.length > 0) {
+      q = q.or(`receipt_no.ilike.%${s}%,staff_id.in.(${staffIds.join(',')})`)
+    } else {
+      q = q.ilike('receipt_no', `%${s}%`)
+    }
   }
 
   const asc = params?.sort === 'asc'
@@ -661,7 +764,7 @@ export async function apiReturnTransaction(
 
   await supabase.from('transactions').update({ status: 'refunded' }).eq('id', id)
 
-  // Restore stock
+  // Restore stock — awaited so failures surface to the caller
   for (const ti of (txItems ?? [])) {
     const ri = items.find((i) => i.item_id === (ti as { id: string }).id)
     if (!ri || !(ti as { product_id: string | null }).product_id) continue
@@ -669,9 +772,10 @@ export async function apiReturnTransaction(
       .eq('product_id', (ti as { product_id: string }).product_id)
       .eq('branch_id', txData.branch_id).maybeSingle()
     if (level) {
-      void supabase.from('stock_levels')
+      const { error: stockErr } = await supabase.from('stock_levels')
         .update({ stock: (level as { id: string; stock: number }).stock + ri.quantity })
         .eq('id', (level as { id: string; stock: number }).id)
+      if (stockErr) throw new Error(`Return saved but stock restore failed: ${stockErr.message}`)
     }
   }
 
@@ -770,14 +874,18 @@ export async function apiDeleteVoucher(id: string) {
 
 export async function apiSalesReport(params: Record<string, string>) {
   let q = supabase.from('transactions')
-    .select('id, total, created_at, transaction_items(product_id, product_name, quantity, subtotal)')
+    .select('id, total, payment_method, created_at, transaction_items(product_id, product_name, quantity, subtotal), transaction_payments(method, amount)')
     .eq('status', 'completed')
   if (params.from) q = q.gte('created_at', params.from)
   if (params.to)   q = q.lte('created_at', params.to)
   const { data, error } = await q
   if (error) throw new Error(error.message)
 
-  const txns = (data ?? []) as { id: string; total: number | string; created_at: string; transaction_items: { product_id: string; product_name: string; quantity: number; subtotal: number | string }[] }[]
+  const txns = (data ?? []) as {
+    id: string; total: number | string; payment_method: string; created_at: string
+    transaction_items: { product_id: string; product_name: string; quantity: number; subtotal: number | string }[]
+    transaction_payments: { method: string; amount: number | string }[]
+  }[]
 
   const total_revenue      = txns.reduce((s, t) => s + Number(t.total), 0)
   const transaction_count  = txns.length
@@ -812,7 +920,43 @@ export async function apiSalesReport(params: Record<string, string>) {
   }
   const topProducts = [...prodMap.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 10)
 
-  return { summary: { total_revenue, transaction_count, total_items_sold, avg_order_value }, salesByPeriod, topProducts }
+  // By payment method — sum amounts across all payment splits
+  const methodMap: Record<string, { count: number; total: number }> = {}
+  for (const t of txns) {
+    for (const p of (t.transaction_payments ?? [])) {
+      if (!methodMap[p.method]) methodMap[p.method] = { count: 0, total: 0 }
+      methodMap[p.method].count += 1
+      methodMap[p.method].total += Number(p.amount)
+    }
+    // Fallback for transactions that have no payment splits (legacy data)
+    if (!t.transaction_payments?.length && t.payment_method) {
+      const m = t.payment_method
+      if (!methodMap[m]) methodMap[m] = { count: 0, total: 0 }
+      methodMap[m].count += 1
+      methodMap[m].total += Number(t.total)
+    }
+  }
+  const byPaymentMethod = Object.entries(methodMap).map(([method, v]) => ({ method, ...v }))
+    .sort((a, b) => b.total - a.total)
+
+  // Hourly heatmap — count and revenue per hour of day (0–23)
+  const hourBuckets: { hour: number; count: number; revenue: number }[] = Array.from({ length: 24 }, (_, h) => ({
+    hour: h, count: 0, revenue: 0,
+  }))
+  for (const t of txns) {
+    const hour = new Date(t.created_at).getHours()
+    hourBuckets[hour].count   += 1
+    hourBuckets[hour].revenue += Number(t.total)
+  }
+  const hourlyHeatmap = hourBuckets
+
+  return {
+    summary: { total_revenue, transaction_count, total_items_sold, avg_order_value },
+    salesByPeriod,
+    topProducts,
+    byPaymentMethod,
+    hourlyHeatmap,
+  }
 }
 
 export async function apiFinancialReport(params: Record<string, string>) {
@@ -1003,20 +1147,34 @@ export async function apiGetStaffMember(id: string) {
 
 export async function apiCreateStaff(data: Record<string, unknown>) {
   const current = await getCurrentStaff()
+  const email    = (data.email as string).toLowerCase().trim()
+  const password = data.password as string | undefined
 
-  // Check email uniqueness
-  const { count } = await supabase.from('staff').select('*', { count: 'exact', head: true })
-    .eq('email', (data.email as string).toLowerCase())
-  if ((count ?? 0) > 0) throw new Error('A staff member with that email already exists.')
+  if (!password || password.length < 8) {
+    throw new Error('A password of at least 8 characters is required to create a staff account.')
+  }
 
+  // 1. Create the Supabase Auth user via a non-persisting client so we don't
+  //    replace the current admin's session.
+  const { data: authData, error: signUpErr } = await _signupClient.auth.signUp({
+    email,
+    password,
+    options: { emailRedirectTo: undefined },
+  })
+  if (signUpErr) throw new Error(`Auth error: ${signUpErr.message}`)
+  const authId = authData.user?.id
+  if (!authId) throw new Error('Failed to create auth account — no user ID returned.')
+
+  // 2. Insert the staff row with the new auth_id
   const { data: staff, error } = await supabase
     .from('staff')
     .insert({
+      auth_id:   authId,
       branch_id: (data.branch_id as string | null) ?? current?.branch_id,
-      name:  data.name  as string,
-      email: data.email as string,
-      role:  data.role  as string,
-      status: 'active',
+      name:      data.name  as string,
+      email,
+      role:      data.role  as string,
+      status:    'active',
     })
     .select('*').single()
   if (error) throw new Error(error.message)
@@ -1036,6 +1194,27 @@ export async function apiUpdateStaff(id: string, data: Record<string, unknown>) 
   const { data: staff, error } = await supabase
     .from('staff').update(col).eq('id', id).select('*').single()
   if (error) throw new Error(error.message)
+
+  // Password change — only possible when the staff member has a linked auth account
+  if (data.password) {
+    const authId = (staff as SupabaseStaff & { auth_id?: string | null }).auth_id
+    if (!authId) {
+      throw new Error(
+        'This staff member has no linked auth account. Profile saved, but password was not changed. ' +
+        'Create a new account to link credentials.',
+      )
+    }
+    const { error: passErr } = await supabase.auth.admin.updateUserById(authId, {
+      password: data.password as string,
+    })
+    if (passErr) {
+      throw new Error(
+        `Profile saved, but password update requires admin privileges: ${passErr.message}. ` +
+        'Use the Supabase dashboard to update the password directly.',
+      )
+    }
+  }
+
   return mapStaff(staff as SupabaseStaff)
 }
 
@@ -1175,7 +1354,7 @@ export async function apiCreateAdjustment(data: {
     .single()
   if (error) throw new Error(error.message)
 
-  // Update stock
+  // Update stock — awaited so callers know whether it actually succeeded
   const { data: level } = await supabase.from('stock_levels').select('id, stock')
     .eq('product_id', data.product_id).eq('branch_id', data.branch_id).maybeSingle()
   if (level) {
@@ -1184,7 +1363,8 @@ export async function apiCreateAdjustment(data: {
     if (data.type === 'in'  || data.type === 'return')  newStock = stock + data.quantity
     if (data.type === 'out' || data.type === 'damage')  newStock = Math.max(0, stock - data.quantity)
     if (data.type === 'correction')                     newStock = data.quantity
-    void supabase.from('stock_levels').update({ stock: newStock }).eq('id', levelId)
+    const { error: stockErr } = await supabase.from('stock_levels').update({ stock: newStock }).eq('id', levelId)
+    if (stockErr) throw new Error(`Adjustment saved but stock update failed: ${stockErr.message}`)
   }
 
   const adjRow = adj as unknown as { id: string; product_id: string; type: string; quantity: number; reason: string | null; branch_id: string; created_at: string; products: { name: string; sku: string } | null }

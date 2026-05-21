@@ -1,9 +1,10 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { Search, RotateCcw, XCircle, Loader2, AlertCircle } from 'lucide-react'
 import { Badge } from '../../components/ui/Badge'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { Modal } from '../../components/ui/Modal'
 import { apiGetTransactions, apiVoidTransaction, apiGetTransaction, apiReturnTransaction } from '../../lib/api'
+import { supabase } from '../../lib/supabase'
 import { useApiData } from '../../hooks/useApiData'
 
 function fmt(n: number) { return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2 })}` }
@@ -50,6 +51,24 @@ export function Returns() {
   )
   const { data, loading, error } = useApiData(fetchReturns, [tick])
   const entries = data?.data ?? []
+
+  // ── Realtime: refresh when a void or return is processed ─────────────────────
+  useEffect(() => {
+    const channel = supabase
+      .channel('returns-rt')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'transactions' },
+        () => setTick((t) => t + 1),
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'returns' },
+        () => setTick((t) => t + 1),
+      )
+      .subscribe()
+    return () => { void supabase.removeChannel(channel) }
+  }, [])
 
   const filtered = entries.filter((r) => {
     if (!search) return true

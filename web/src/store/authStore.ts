@@ -7,41 +7,72 @@ interface AuthState {
   user: User | null
   isAuthenticated: boolean
   isLoading: boolean
-  login: (user: User) => void
+  login: (user: User & { avatar_url?: string }) => void
   logout: () => void
+  updateUser: (patch: Partial<User>) => void
   restoreSession: () => Promise<void>
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+/**
+ * localStorage is used as an *offline fallback* only.
+ * The source of truth is Supabase Auth user_metadata.avatar_url.
+ */
+function cachedAvatar(userId: string): string | undefined {
+  try { return localStorage.getItem(`tenpos:avatar:${userId}`) ?? undefined } catch { return undefined }
+}
+function cacheAvatar(userId: string, url: string | undefined) {
+  try {
+    url
+      ? localStorage.setItem(`tenpos:avatar:${userId}`, url)
+      : localStorage.removeItem(`tenpos:avatar:${userId}`)
+  } catch { /* storage full — ignore */ }
+}
+
+export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   isAuthenticated: false,
   isLoading: true,
 
-  login: (user) => set({ user, isAuthenticated: true }),
+  /** Called right after apiLogin — the API response now carries avatar_url from Supabase metadata. */
+  login: (userData) => {
+    const avatarUrl = userData.avatar_url ?? cachedAvatar(userData.id)
+    if (avatarUrl) cacheAvatar(userData.id, avatarUrl)
+    const { avatar_url: _, ...user } = userData as typeof userData & { avatar_url?: string }
+    set({ user: { ...user, avatarUrl }, isAuthenticated: true })
+  },
 
   logout: () => {
     clearTokens()
     set({ user: null, isAuthenticated: false })
   },
 
+  /** Patch the in-memory user and keep localStorage in sync for offline fallback. */
+  updateUser: (patch) => {
+    const current = get().user
+    if (!current) return
+    if ('avatarUrl' in patch) cacheAvatar(current.id, patch.avatarUrl)
+    set({ user: { ...current, ...patch } })
+  },
+
   restoreSession: async () => {
     const token = getToken()
-    if (!token) {
-      set({ isLoading: false })
-      return
-    }
+    if (!token) { set({ isLoading: false }); return }
     try {
       const me = await apiMe()
-      const initials = getAvatarInitials(me.name)
+      const initials  = getAvatarInitials(me.name)
+      // Prefer Supabase-stored URL; fall back to local cache for offline resilience
+      const avatarUrl = me.avatar_url ?? cachedAvatar(me.id)
+      if (avatarUrl) cacheAvatar(me.id, avatarUrl)  // keep cache warm
       set({
         user: {
-          id: me.id,
-          name: me.name,
-          email: me.email,
-          role: me.role as User['role'],
+          id:             me.id,
+          name:           me.name,
+          email:          me.email,
+          role:           me.role as User['role'],
           avatarInitials: initials,
-          branch: 'Main Branch',
-          branch_id: me.branch_id,
+          branch:         'Main Branch',
+          branch_id:      me.branch_id,
+          avatarUrl,
         },
         isAuthenticated: true,
         isLoading: false,
@@ -53,9 +84,6 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 }))
 
-// Forced logout from api.ts (session expired)
 if (typeof window !== 'undefined') {
-  window.addEventListener('tenpos:logout', () => {
-    useAuthStore.getState().logout()
-  })
+  window.addEventListener('tenpos:logout', () => useAuthStore.getState().logout())
 }

@@ -288,7 +288,7 @@ export function SalesReport() {
             <StatCard
               label="Top Product"
               value={allProducts[0]?.product_name?.split(' ').slice(0, 2).join(' ') ?? '—'}
-              sub={allProducts[0] ? fmt(Number(allProducts[0].revenue)) : ''}
+              subLabel={allProducts[0] ? fmt(Number(allProducts[0].revenue)) : ''}
               icon={TrendingUp}
               iconColor="text-purple-600"
               iconBg="bg-purple-50"

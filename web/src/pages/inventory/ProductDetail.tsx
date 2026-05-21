@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Edit, Trash2, TrendingDown, Loader2, Package, Tag } from 'lucide-react'
+import { ArrowLeft, Edit, Trash2, TrendingDown, Loader2, Tag } from 'lucide-react'
 import { Badge } from '../../components/ui/Badge'
 import { Modal } from '../../components/ui/Modal'
 import { apiGetProduct, apiDeleteProduct, apiGetAdjustments } from '../../lib/api'

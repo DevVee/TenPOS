@@ -15,6 +15,8 @@ export interface User {
   avatarInitials: string
   branch: string
   branch_id: string | null
+  /** Base64 data-URI or remote URL for the profile picture */
+  avatarUrl?: string
 }
 
 // ─── Products ────────────────────────────────────────────────────────────────

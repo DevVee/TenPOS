@@ -189,7 +189,7 @@ export function StaffReport() {
             <StatCard
               label="Best Performer"
               value={best?.name ?? '—'}
-              sub={best ? fmt(best.revenue) : ''}
+              subLabel={best ? fmt(best.revenue) : ''}
               icon={TrendingUp}
               iconColor="text-green-600"
               iconBg="bg-green-50"

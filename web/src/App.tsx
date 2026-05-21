@@ -43,6 +43,7 @@ const Vouchers          = lazy(() => import('./pages/settings/Vouchers')        
 const SyncLog           = lazy(() => import('./pages/settings/SyncLog')              .then(m => ({ default: m.SyncLog })))
 
 const AuditLog          = lazy(() => import('./pages/audit/AuditLog')                .then(m => ({ default: m.AuditLog })))
+const ProfileSettings   = lazy(() => import('./pages/profile/ProfileSettings')      .then(m => ({ default: m.ProfileSettings })))
 
 // ── Page loader shown while a lazy chunk is downloading ───────────────────────
 function PageLoader() {
@@ -137,6 +138,8 @@ function BoundedRoutes() {
             <Route path="/settings/sync-log"           element={<SyncLog />} />
 
             <Route path="/audit"                       element={<AuditLog />} />
+
+            <Route path="/profile"                     element={<ProfileSettings />} />
           </Route>
 
           <Route path="/"  element={<Navigate to="/login" replace />} />
