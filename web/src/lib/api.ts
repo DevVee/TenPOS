@@ -601,6 +601,43 @@ export async function apiVoidTransaction(id: string, reason: string) {
   return { ok: true }
 }
 
+// ─── Manager Override PIN ─────────────────────────────────────────────────────
+
+/** Void a transaction using a manager override PIN (cashier-initiated) */
+export async function apiVoidWithPin(id: string, reason: string, pin: string) {
+  const { error } = await supabase.rpc('void_with_pin', {
+    p_transaction_id: id,
+    p_reason:         reason,
+    p_pin:            pin,
+  })
+  if (error) throw new Error(error.message)
+  return { ok: true }
+}
+
+/** Set (or change) the current manager's override PIN */
+export async function apiSetOverridePin(pin: string) {
+  const { error } = await supabase.rpc('set_override_pin', { p_pin: pin })
+  if (error) throw new Error(error.message)
+}
+
+/** Remove the current manager's override PIN */
+export async function apiClearOverridePin() {
+  const { error } = await supabase.rpc('clear_override_pin')
+  if (error) throw new Error(error.message)
+}
+
+/** Returns true if the current user has an override PIN set */
+export async function apiGetMyPinStatus(): Promise<boolean> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return false
+  const { data } = await supabase
+    .from('staff')
+    .select('override_pin_hash')
+    .eq('auth_id', user.id)
+    .single()
+  return !!((data as Record<string, unknown> | null)?.override_pin_hash)
+}
+
 export async function apiReturnTransaction(
   id: string,
   items: { item_id: string; quantity: number; reason?: string }[],

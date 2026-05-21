@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Printer, RotateCcw, XCircle, Loader2, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Printer, RotateCcw, XCircle, Loader2, AlertCircle, KeyRound, Eye, EyeOff } from 'lucide-react'
 import { Badge } from '../../components/ui/Badge'
 import { Modal } from '../../components/ui/Modal'
-import { apiGetTransaction, apiVoidTransaction } from '../../lib/api'
+import { apiGetTransaction, apiVoidTransaction, apiVoidWithPin } from '../../lib/api'
 import { useApiData } from '../../hooks/useApiData'
+import { useAuthStore } from '../../store/authStore'
 
 function fmt(n: number) { return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2 })}` }
 
@@ -19,26 +20,55 @@ interface TxDetail {
 export function TransactionDetail() {
   const navigate = useNavigate()
   const { id } = useParams<{ id: string }>()
-  const [voidModal, setVoidModal] = useState(false)
-  const [voidReason, setVoidReason] = useState('')
-  const [voiding, setVoiding] = useState(false)
-  const [voidError, setVoidError] = useState('')
+  const { user } = useAuthStore()
+
+  // Managers/admins void directly; cashiers must supply a manager PIN
+  const isCashier = user?.role === 'cashier' || user?.role === 'viewer'
+
+  const [voidModal,   setVoidModal]   = useState(false)
+  const [voidStep,    setVoidStep]    = useState<'reason' | 'pin'>('reason')
+  const [voidReason,  setVoidReason]  = useState('')
+  const [managerPin,  setManagerPin]  = useState('')
+  const [showPin,     setShowPin]     = useState(false)
+  const [voiding,     setVoiding]     = useState(false)
+  const [voidError,   setVoidError]   = useState('')
 
   const { data: tx, loading, error, refetch } = useApiData<TxDetail>(
     () => apiGetTransaction(id!) as Promise<TxDetail>,
     [id]
   )
 
+  const openVoidModal = () => {
+    setVoidStep('reason'); setVoidReason(''); setManagerPin('')
+    setShowPin(false); setVoidError('')
+    setVoidModal(true)
+  }
+
+  const handleNextStep = () => {
+    if (!voidReason.trim()) return
+    if (isCashier) {
+      setManagerPin(''); setShowPin(false); setVoidError('')
+      setVoidStep('pin')
+    } else {
+      handleVoid()
+    }
+  }
+
   const handleVoid = async () => {
     if (!voidReason.trim() || !id) return
-    setVoiding(true)
-    setVoidError('')
+    setVoiding(true); setVoidError('')
     try {
-      await apiVoidTransaction(id, voidReason.trim())
+      if (isCashier) {
+        if (!/^\d{4,8}$/.test(managerPin)) { setVoidError('PIN must be 4–8 digits.'); setVoiding(false); return }
+        await apiVoidWithPin(id, voidReason.trim(), managerPin)
+      } else {
+        await apiVoidTransaction(id, voidReason.trim())
+      }
       setVoidModal(false)
       refetch()
     } catch (err) {
-      setVoidError(err instanceof Error ? err.message : 'Failed to void transaction')
+      const msg = err instanceof Error ? err.message : 'Failed to void transaction'
+      setVoidError(msg.includes('INVALID_PIN') ? 'Incorrect PIN. Please try again.' : msg)
     } finally {
       setVoiding(false)
     }
@@ -184,7 +214,7 @@ export function TransactionDetail() {
               <RotateCcw className="w-4 h-4" /> Return
             </button>
             <button
-              onClick={() => setVoidModal(true)}
+              onClick={openVoidModal}
               className="btn-secondary flex items-center gap-1.5 flex-1 justify-center text-red-600 border-red-200 hover:bg-red-50"
             >
               <XCircle className="w-4 h-4" /> Void
@@ -193,19 +223,33 @@ export function TransactionDetail() {
         )}
       </div>
 
-      {/* Void confirmation modal */}
-      <Modal open={voidModal} onClose={() => setVoidModal(false)} title="Void Transaction">
+      {/* Void modal — Step 1: Reason (all roles) */}
+      <Modal
+        open={voidModal && voidStep === 'reason'}
+        onClose={() => setVoidModal(false)}
+        title="Void Transaction"
+      >
         <div className="space-y-4">
           <p className="text-sm text-gray-600">
-            Void <strong>{tx.receipt_no}</strong> for {fmt(Number(tx.total))}? This will restore stock and cannot be undone.
+            Void <strong>{tx.receipt_no}</strong> for {fmt(Number(tx.total))}?
+            This will restore stock and cannot be undone.
           </p>
+          {isCashier && (
+            <div className="flex items-start gap-2 p-3 bg-amber-50 rounded-lg text-sm text-amber-800">
+              <KeyRound className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              <span>You'll need a manager's override PIN to complete this void.</span>
+            </div>
+          )}
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1.5">Reason for void <span className="text-brand">*</span></label>
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">
+              Reason for void <span className="text-brand">*</span>
+            </label>
             <input
               className="input-base"
               placeholder="e.g. Customer changed mind"
               value={voidReason}
               onChange={(e) => setVoidReason(e.target.value)}
+              autoFocus
             />
           </div>
           {voidError && (
@@ -216,12 +260,68 @@ export function TransactionDetail() {
           <div className="flex justify-end gap-2 pt-1">
             <button onClick={() => setVoidModal(false)} className="btn-secondary">Cancel</button>
             <button
-              onClick={handleVoid}
+              onClick={handleNextStep}
               disabled={!voidReason.trim() || voiding}
               className="bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
             >
               {voiding && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              Confirm Void
+              {isCashier ? 'Next — Enter PIN →' : 'Confirm Void'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Void modal — Step 2: Manager PIN (cashiers only) */}
+      <Modal
+        open={voidModal && voidStep === 'pin'}
+        onClose={() => setVoidModal(false)}
+        title="Manager Authorization"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-2 p-3 bg-blue-50 rounded-lg text-sm text-blue-800">
+            <KeyRound className="w-4 h-4 mt-0.5 flex-shrink-0" />
+            <span>Ask a manager to enter their override PIN to authorize this void.</span>
+          </div>
+          <div>
+            <p className="text-xs text-gray-400 mb-1">Voiding: <span className="font-medium text-gray-700">{tx.receipt_no}</span></p>
+            <p className="text-xs text-gray-400">Reason: <span className="font-medium text-gray-700">{voidReason}</span></p>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">Manager Override PIN</label>
+            <div className="relative">
+              <input
+                type={showPin ? 'text' : 'password'}
+                inputMode="numeric"
+                maxLength={8}
+                className="input-base pr-10 text-center tracking-widest text-lg"
+                placeholder="••••"
+                value={managerPin}
+                onChange={(e) => setManagerPin(e.target.value.replace(/\D/g, ''))}
+                autoFocus
+              />
+              <button
+                type="button"
+                onClick={() => setShowPin(!showPin)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+          {voidError && (
+            <div className="flex items-center gap-2 text-sm text-red-600">
+              <AlertCircle className="w-4 h-4" /> {voidError}
+            </div>
+          )}
+          <div className="flex justify-end gap-2 pt-1">
+            <button onClick={() => setVoidStep('reason')} className="btn-secondary">← Back</button>
+            <button
+              onClick={handleVoid}
+              disabled={managerPin.length < 4 || voiding}
+              className="bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+            >
+              {voiding && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              Authorize &amp; Void
             </button>
           </div>
         </div>

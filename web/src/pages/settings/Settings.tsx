@@ -1,7 +1,10 @@
-import { useState } from 'react'
-import { Save, Check, Store, Receipt, Shield, RefreshCw, Clock, Printer, Package } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Save, Check, Store, Receipt, Shield, RefreshCw, Clock, Printer, Package, KeyRound, Eye, EyeOff, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
 import { PageHeader } from '../../components/ui/PageHeader'
+import { Modal } from '../../components/ui/Modal'
 import { useSettingsStore } from '../../store/settingsStore'
+import { useAuthStore } from '../../store/authStore'
+import { apiGetMyPinStatus, apiSetOverridePin, apiClearOverridePin } from '../../lib/api'
 
 /**
  * Toggle — pill switch.
@@ -35,7 +38,58 @@ function SectionHeader({ icon: Icon, title }: { icon: React.ElementType; title: 
 
 export function Settings() {
   const s = useSettingsStore()
+  const { user } = useAuthStore()
   const [saved, setSaved] = useState(false)
+
+  // ── Manager Override PIN state ──────────────────────────────────────────────
+  const isManager = user?.role === 'admin' || user?.role === 'manager'
+  const [pinHasSet,       setPinHasSet]       = useState(false)
+  const [showPinModal,    setShowPinModal]     = useState(false)
+  const [showClearConfirm,setShowClearConfirm] = useState(false)
+  const [pinValue,        setPinValue]         = useState('')
+  const [pinConfirm,      setPinConfirm]       = useState('')
+  const [showPin,         setShowPin]          = useState(false)
+  const [pinSaving,       setPinSaving]        = useState(false)
+  const [pinError,        setPinError]         = useState('')
+  const [pinClearing,     setPinClearing]      = useState(false)
+
+  useEffect(() => {
+    if (!isManager) return
+    apiGetMyPinStatus().then(setPinHasSet).catch(() => {})
+  }, [isManager])
+
+  const openSetPin = () => {
+    setPinValue(''); setPinConfirm(''); setPinError(''); setShowPin(false)
+    setShowPinModal(true)
+  }
+
+  const handleSavePin = async () => {
+    if (!/^\d{4,8}$/.test(pinValue)) { setPinError('PIN must be 4–8 digits.'); return }
+    if (pinValue !== pinConfirm)      { setPinError('PINs do not match.'); return }
+    setPinSaving(true); setPinError('')
+    try {
+      await apiSetOverridePin(pinValue)
+      setPinHasSet(true)
+      setShowPinModal(false)
+    } catch (err) {
+      setPinError(err instanceof Error ? err.message : 'Failed to save PIN')
+    } finally {
+      setPinSaving(false)
+    }
+  }
+
+  const handleClearPin = async () => {
+    setPinClearing(true)
+    try {
+      await apiClearOverridePin()
+      setPinHasSet(false)
+      setShowClearConfirm(false)
+    } catch {
+      /* show nothing — rare */
+    } finally {
+      setPinClearing(false)
+    }
+  }
 
   const [form, setForm] = useState({
     storeName:             s.storeName,
@@ -128,6 +182,46 @@ export function Settings() {
             </div>
           </div>
         </div>
+
+        {/* ── Manager Override PIN (managers/admins only) ──────────────── */}
+        {isManager && (
+          <div className="card p-5">
+            <SectionHeader icon={KeyRound} title="Manager Override PIN" />
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1">
+                <p className="text-sm text-gray-600">
+                  Set a personal PIN so cashiers can request manager authorization for voids and discounts
+                  without you being physically present.
+                </p>
+                <div className="flex items-center gap-2 mt-3">
+                  {pinHasSet ? (
+                    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-green-700 bg-green-50 px-2.5 py-1 rounded-full">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> PIN is set
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">
+                      <AlertCircle className="w-3.5 h-3.5" /> No PIN set
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="flex gap-2 flex-shrink-0">
+                <button onClick={openSetPin} className="btn-secondary text-sm flex items-center gap-1.5">
+                  <KeyRound className="w-3.5 h-3.5" />
+                  {pinHasSet ? 'Change PIN' : 'Set PIN'}
+                </button>
+                {pinHasSet && (
+                  <button
+                    onClick={() => setShowClearConfirm(true)}
+                    className="btn-secondary text-sm text-red-600 border-red-200 hover:bg-red-50"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── Row 2: Two columns ───────────────────────────────────────── */}
         <div className="grid lg:grid-cols-2 gap-4">
@@ -302,6 +396,89 @@ export function Settings() {
           </div>
         </div>
       </div>
+
+      {/* ── Set / Change PIN modal ────────────────────────────────────────── */}
+      <Modal open={showPinModal} onClose={() => setShowPinModal(false)} title={pinHasSet ? 'Change Override PIN' : 'Set Override PIN'}>
+        <div className="space-y-4">
+          <p className="text-sm text-gray-500">
+            Cashiers will enter this PIN to request your authorization when you're not at the counter.
+            Use 4–8 digits.
+          </p>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">New PIN</label>
+            <div className="relative">
+              <input
+                type={showPin ? 'text' : 'password'}
+                inputMode="numeric"
+                maxLength={8}
+                className="input-base pr-10"
+                placeholder="••••"
+                value={pinValue}
+                onChange={(e) => setPinValue(e.target.value.replace(/\D/g, ''))}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPin(!showPin)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">Confirm PIN</label>
+            <input
+              type={showPin ? 'text' : 'password'}
+              inputMode="numeric"
+              maxLength={8}
+              className="input-base"
+              placeholder="••••"
+              value={pinConfirm}
+              onChange={(e) => setPinConfirm(e.target.value.replace(/\D/g, ''))}
+            />
+          </div>
+
+          {pinError && (
+            <div className="flex items-center gap-2 text-sm text-red-600">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" /> {pinError}
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 pt-1">
+            <button onClick={() => setShowPinModal(false)} className="btn-secondary">Cancel</button>
+            <button
+              onClick={handleSavePin}
+              disabled={!pinValue || !pinConfirm || pinSaving}
+              className="btn-primary flex items-center gap-2 disabled:opacity-50"
+            >
+              {pinSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {pinHasSet ? 'Update PIN' : 'Save PIN'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ── Clear PIN confirm modal ───────────────────────────────────────── */}
+      <Modal open={showClearConfirm} onClose={() => setShowClearConfirm(false)} title="Remove Override PIN">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Are you sure? Cashiers will no longer be able to use your PIN to authorize voids or discounts.
+          </p>
+          <div className="flex justify-end gap-2 pt-1">
+            <button onClick={() => setShowClearConfirm(false)} className="btn-secondary">Cancel</button>
+            <button
+              onClick={handleClearPin}
+              disabled={pinClearing}
+              className="bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+            >
+              {pinClearing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              Yes, Remove PIN
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }
