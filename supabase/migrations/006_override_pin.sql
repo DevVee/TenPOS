@@ -3,6 +3,7 @@
 -- Adds manager override PIN for cashier-initiated voids.
 --
 -- Run this in Supabase SQL Editor (Project → SQL Editor → New query).
+-- Safe to re-run — all statements are idempotent.
 -- ─────────────────────────────────────────────────────────────────────────────
 
 -- pgcrypto is needed for bcrypt hashing
@@ -10,6 +11,17 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- Add the hashed PIN column to staff
 ALTER TABLE staff ADD COLUMN IF NOT EXISTS override_pin_hash TEXT;
+
+-- ─── Helper: returns the role of the currently-authenticated staff member ────
+-- Used internally by set_override_pin and clear_override_pin.
+CREATE OR REPLACE FUNCTION get_my_role()
+RETURNS TEXT
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+AS $$
+  SELECT role FROM staff WHERE auth_id = auth.uid() LIMIT 1;
+$$;
 
 -- ─── RPC: Manager sets their own override PIN ────────────────────────────────
 CREATE OR REPLACE FUNCTION set_override_pin(p_pin TEXT)
