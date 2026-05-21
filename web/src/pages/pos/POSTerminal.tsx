@@ -301,10 +301,10 @@ export function POSTerminal() {
                           {/* ⓘ Info button */}
                           <button
                             onClick={(e) => { e.stopPropagation(); setInfoProduct(product) }}
-                            className="w-6 h-6 rounded-md flex items-center justify-center text-gray-300 hover:text-brand hover:bg-brand-pale transition-all"
+                            className="w-8 h-8 rounded-lg flex items-center justify-center bg-gray-100 text-gray-500 hover:bg-brand-pale hover:text-brand active:scale-95 transition-all"
                             title="View details"
                           >
-                            <Info className="w-3.5 h-3.5" />
+                            <Info className="w-4 h-4" />
                           </button>
                         </div>
                       </div>

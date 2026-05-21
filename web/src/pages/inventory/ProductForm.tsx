@@ -64,46 +64,102 @@ function Collapsible({ title, badge, children, defaultOpen = false }: {
 function ImageGallery({ selected, onSelect, onClose }: {
   selected: string; onSelect: (url: string) => void; onClose: () => void
 }) {
+  const [uploadedUrls, setUploadedUrls] = useState<string[]>([])
+  const [loadingUploads, setLoadingUploads] = useState(true)
+
+  // Pull previously-uploaded images from Supabase Storage on open
+  useEffect(() => {
+    const load = async () => {
+      setLoadingUploads(true)
+      try {
+        const { data: files } = await supabase.storage.from('products').list('', {
+          limit: 100, sortBy: { column: 'created_at', order: 'desc' },
+        })
+        if (files) {
+          const urls = files
+            .filter((f) => f.name !== '.emptyFolderPlaceholder' && f.name !== '')
+            .map((f) => supabase.storage.from('products').getPublicUrl(f.name).data.publicUrl)
+          setUploadedUrls(urls)
+        }
+      } catch { /* ignore */ }
+      setLoadingUploads(false)
+    }
+    load()
+  }, [])
+
+  function ThumbBtn({ url, label }: { url: string; label?: string }) {
+    return (
+      <button
+        onClick={() => { onSelect(url); onClose() }}
+        title={label}
+        className={`aspect-square rounded-xl border-2 overflow-hidden transition-all active:scale-95 ${
+          selected === url
+            ? 'border-brand ring-2 ring-brand/30 shadow-md'
+            : 'border-gray-100 hover:border-brand/40'
+        }`}
+      >
+        <img src={url} alt={label ?? ''} className="w-full h-full object-cover"
+          onError={(e) => { (e.target as HTMLImageElement).parentElement!.style.display = 'none' }} />
+      </button>
+    )
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" onClick={onClose} />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col">
+
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
           <div>
             <h3 className="font-bold text-gray-900">Choose Product Image</h3>
-            <p className="text-xs text-gray-400 mt-0.5">Select from gallery or upload your own</p>
+            <p className="text-xs text-gray-400 mt-0.5">Select from uploads or built-in gallery</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 rounded-xl hover:bg-gray-100 text-gray-400 flex items-center justify-center transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>
-        <div className="overflow-y-auto flex-1 p-4">
-          <div className="grid grid-cols-4 sm:grid-cols-5 gap-3">
-            <button
-              onClick={() => { onSelect(''); onClose() }}
-              className={`aspect-square rounded-xl border-2 flex items-center justify-center transition-all ${
-                selected === '' ? 'border-brand bg-brand-pale' : 'border-dashed border-gray-200 hover:border-gray-300'
-              }`}
-            >
-              <X className="w-6 h-6 text-gray-300" />
-            </button>
-            {GALLERY_IMAGES.map((img) => {
-              const url = `/products/${img.file}`
-              return (
-                <button
-                  key={img.file}
-                  onClick={() => { onSelect(url); onClose() }}
-                  title={img.label}
-                  className={`aspect-square rounded-xl border-2 overflow-hidden transition-all ${
-                    selected === url ? 'border-brand ring-2 ring-brand/30 shadow-md' : 'border-gray-100 hover:border-gray-300'
-                  }`}
-                >
-                  <img src={url} alt={img.label} className="w-full h-full object-cover"
-                    onError={(e) => { (e.target as HTMLImageElement).parentElement!.style.display = 'none' }} />
-                </button>
-              )
-            })}
+
+        <div className="overflow-y-auto flex-1 p-4 space-y-5">
+
+          {/* ── Uploaded (Supabase Storage) ───────────────────────── */}
+          <div>
+            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2.5 flex items-center gap-1.5">
+              <Upload className="w-3 h-3" /> Previously Uploaded
+            </p>
+            {loadingUploads ? (
+              <div className="flex items-center gap-2 text-xs text-gray-400 py-2">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading…
+              </div>
+            ) : uploadedUrls.length === 0 ? (
+              <p className="text-xs text-gray-300 italic py-1">No uploads yet — images you upload will appear here.</p>
+            ) : (
+              <div className="grid grid-cols-4 sm:grid-cols-6 gap-2.5">
+                {uploadedUrls.map((url) => <ThumbBtn key={url} url={url} />)}
+              </div>
+            )}
           </div>
+
+          {/* ── Built-in gallery ──────────────────────────────────── */}
+          <div>
+            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2.5 flex items-center gap-1.5">
+              <Images className="w-3 h-3" /> Built-in Gallery
+            </p>
+            <div className="grid grid-cols-4 sm:grid-cols-6 gap-2.5">
+              {/* No image option */}
+              <button
+                onClick={() => { onSelect(''); onClose() }}
+                className={`aspect-square rounded-xl border-2 flex items-center justify-center transition-all active:scale-95 ${
+                  selected === '' ? 'border-brand bg-brand-pale' : 'border-dashed border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <X className="w-5 h-5 text-gray-300" />
+              </button>
+              {GALLERY_IMAGES.map((img) => (
+                <ThumbBtn key={img.file} url={`/products/${img.file}`} label={img.label} />
+              ))}
+            </div>
+          </div>
+
         </div>
       </div>
     </div>
