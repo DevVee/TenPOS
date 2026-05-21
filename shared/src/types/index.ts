@@ -39,6 +39,17 @@ export interface Product {
   reorderPoint: number
   imageUrl?: string
   variants?: ProductVariant[]
+  // Extended optional fields
+  description?: string
+  brand?: string
+  material?: string
+  color?: string
+  weightGrams?: number
+  lengthCm?: number
+  widthCm?: number
+  heightCm?: number
+  tags?: string[]
+  notes?: string
 }
 
 // ─── Cart & POS ───────────────────────────────────────────────────────────────

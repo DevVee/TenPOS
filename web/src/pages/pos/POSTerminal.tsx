@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, type ElementType } from 'react'
-import { Search, Plus, Minus, Trash2, X, Tag, ChevronRight, Wifi, ArrowLeft, LogOut, Package, ShoppingBag, Loader2, ShoppingCart } from 'lucide-react'
+import { Search, Plus, Minus, Trash2, X, Tag, ChevronRight, Wifi, ArrowLeft, LogOut, Package, ShoppingBag, Loader2, ShoppingCart, Info } from 'lucide-react'
 import { usePOSStore } from '../../store/posStore'
 import { useAuthStore } from '../../store/authStore'
 import type { Product, CartItem } from '../../types'
@@ -24,6 +24,7 @@ export function POSTerminal() {
   const [products, setProducts]             = useState<Product[]>([])
   const [loading, setLoading]               = useState(true)
   const [mobileCartOpen, setMobileCartOpen] = useState(false)
+  const [infoProduct, setInfoProduct]       = useState<Product | null>(null)
 
   useEffect(() => {
     let alive = true
@@ -36,20 +37,31 @@ export function POSTerminal() {
           data
             .filter((p) => p.active)
             .map((p) => ({
-              id:          p.id,
-              name:        p.name,
-              sku:         p.sku,
-              barcode:     p.barcode ?? '',
-              category:    p.category_name || 'Other',
-              price:       p.price,
-              cost:        p.cost,
-              stock:       p.stock,
+              id:           p.id,
+              name:         p.name,
+              sku:          p.sku,
+              barcode:      p.barcode ?? '',
+              category:     p.category_name || 'Other',
+              price:        p.price,
+              cost:         p.cost,
+              stock:        p.stock,
               reorderPoint: p.reorder_point,
-              imageUrl:    p.image_url,
-              variants:    p.variants.map((v) => ({
+              imageUrl:     p.image_url,
+              variants:     p.variants.map((v) => ({
                 id: v.id, label: v.label, value: v.value,
                 priceAdjustment: v.price_adjustment, stock: 0,
               })),
+              // Extended optional fields
+              description:  p.description,
+              brand:        p.brand,
+              material:     p.material,
+              color:        p.color,
+              weightGrams:  p.weight_grams,
+              lengthCm:     p.length_cm,
+              widthCm:      p.width_cm,
+              heightCm:     p.height_cm,
+              tags:         p.tags,
+              notes:        p.notes,
             }))
         )
       } catch {
@@ -212,65 +224,73 @@ export function POSTerminal() {
                   const isLow  = product.stock > 0 && product.stock <= product.reorderPoint
                   const isOut  = product.stock === 0
                   return (
-                    <button
+                    <div
                       key={product.id}
-                      onClick={() => !isOut && addToCart(product)}
-                      disabled={isOut}
-                      className={`relative text-left rounded-2xl border-2 transition-all duration-150 active:scale-95 overflow-hidden ${
+                      className={`relative text-left rounded-2xl border-2 transition-all duration-150 overflow-hidden ${
                         isOut
-                          ? 'border-gray-100 opacity-55 cursor-not-allowed bg-white'
+                          ? 'border-gray-100 opacity-55 bg-white'
                           : inCart
                           ? 'border-brand bg-white shadow-lg shadow-brand/15'
                           : 'border-gray-100 bg-white hover:border-gray-300 hover:shadow-md'
                       }`}
                     >
-                      {/* Product image */}
-                      <div className="relative w-full aspect-square bg-gray-50">
-                        {product.imageUrl ? (
-                          <img
-                            src={product.imageUrl}
-                            alt={product.name}
-                            className={`w-full h-full object-cover ${isOut ? 'grayscale' : ''}`}
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <Package className="w-12 h-12 text-gray-200" />
-                          </div>
-                        )}
+                      {/* Clickable image + name area → Add to Cart */}
+                      <div
+                        onClick={() => !isOut && addToCart(product)}
+                        className={!isOut ? 'cursor-pointer active:scale-95 transition-transform' : 'cursor-not-allowed'}
+                      >
+                        {/* Product image */}
+                        <div className="relative w-full aspect-square bg-gray-50">
+                          {product.imageUrl ? (
+                            <img
+                              src={product.imageUrl}
+                              alt={product.name}
+                              className={`w-full h-full object-cover ${isOut ? 'grayscale' : ''}`}
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <Package className="w-12 h-12 text-gray-200" />
+                            </div>
+                          )}
 
-                        {/* Out of stock overlay */}
-                        {isOut && (
-                          <div className="absolute inset-0 bg-white/75 flex items-center justify-center">
-                            <span className="bg-gray-800 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg tracking-wide">OUT OF STOCK</span>
-                          </div>
-                        )}
+                          {/* Out of stock overlay */}
+                          {isOut && (
+                            <div className="absolute inset-0 bg-white/75 flex items-center justify-center">
+                              <span className="bg-gray-800 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg tracking-wide">OUT OF STOCK</span>
+                            </div>
+                          )}
 
-                        {/* Cart quantity badge */}
-                        {inCart && !isOut && (
-                          <span className="absolute top-2 left-2 min-w-[24px] h-6 bg-brand text-white rounded-full text-xs font-black flex items-center justify-center px-1.5 shadow-lg">
-                            {inCart.quantity}
-                          </span>
-                        )}
+                          {/* Cart quantity badge */}
+                          {inCart && !isOut && (
+                            <span className="absolute top-2 left-2 min-w-[24px] h-6 bg-brand text-white rounded-full text-xs font-black flex items-center justify-center px-1.5 shadow-lg">
+                              {inCart.quantity}
+                            </span>
+                          )}
 
-                        {/* Low stock badge */}
-                        {isLow && !isOut && (
-                          <span className="absolute top-2 right-2 bg-yellow-400 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow leading-none">
-                            LOW
-                          </span>
-                        )}
+                          {/* Low stock badge */}
+                          {isLow && !isOut && (
+                            <span className="absolute top-2 right-2 bg-yellow-400 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow leading-none">
+                              LOW
+                            </span>
+                          )}
 
-                        {/* In-cart highlight ring */}
-                        {inCart && !isOut && (
-                          <div className="absolute inset-0 ring-2 ring-brand/30 rounded-t-xl pointer-events-none" />
-                        )}
+                          {/* In-cart highlight ring */}
+                          {inCart && !isOut && (
+                            <div className="absolute inset-0 ring-2 ring-brand/30 rounded-t-xl pointer-events-none" />
+                          )}
+                        </div>
+
+                        {/* Product name + SKU */}
+                        <div className="px-2.5 pt-2.5 pb-1">
+                          <p className="text-xs font-bold text-gray-900 leading-tight line-clamp-2 mb-0.5">{product.name}</p>
+                          <p className="text-[10px] text-gray-400 font-mono">{product.sku}</p>
+                        </div>
                       </div>
 
-                      {/* Info */}
-                      <div className="p-2.5">
-                        <p className="text-xs font-bold text-gray-900 leading-tight line-clamp-2 mb-1">{product.name}</p>
-                        <p className="text-[10px] text-gray-400 font-mono mb-2">{product.sku}</p>
-                        <div className="flex items-center justify-between">
-                          <p className="text-sm font-black text-brand">{fmt(product.price)}</p>
+                      {/* Price + Stock + Info button row */}
+                      <div className="flex items-center justify-between px-2.5 pb-2.5 gap-1">
+                        <p className="text-sm font-black text-brand">{fmt(product.price)}</p>
+                        <div className="flex items-center gap-1">
                           <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
                             isOut  ? 'bg-gray-100 text-gray-400' :
                             isLow  ? 'bg-yellow-50 text-yellow-700' :
@@ -278,9 +298,17 @@ export function POSTerminal() {
                           }`}>
                             {product.stock} left
                           </span>
+                          {/* ⓘ Info button */}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setInfoProduct(product) }}
+                            className="w-6 h-6 rounded-md flex items-center justify-center text-gray-300 hover:text-brand hover:bg-brand-pale transition-all"
+                            title="View details"
+                          >
+                            <Info className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </div>
-                    </button>
+                    </div>
                   )
                 })}
               </div>
@@ -330,6 +358,179 @@ export function POSTerminal() {
           </div>
         </div>
       )}
+
+      {/* ── PRODUCT INFO MODAL ──────────────────────────────────────── */}
+      {infoProduct && (
+        <ProductInfoModal
+          product={infoProduct}
+          onClose={() => setInfoProduct(null)}
+          onAddToCart={(p) => { addToCart(p); setInfoProduct(null) }}
+        />
+      )}
+    </div>
+  )
+}
+
+// ─── Product Info Modal ───────────────────────────────────────────────────────
+
+interface ProductInfoModalProps {
+  product: Product
+  onClose: () => void
+  onAddToCart: (p: Product) => void
+}
+
+function DetailRow({ label, value }: { label: string; value?: string | number | null }) {
+  if (value === undefined || value === null || value === '') return null
+  return (
+    <div className="flex items-start gap-2">
+      <span className="text-xs text-gray-400 w-24 flex-shrink-0 pt-0.5">{label}</span>
+      <span className="text-sm font-medium text-gray-800 flex-1">{value}</span>
+    </div>
+  )
+}
+
+function ProductInfoModal({ product, onClose, onAddToCart }: ProductInfoModalProps) {
+  const isOut = product.stock === 0
+
+  const hasDims = product.lengthCm || product.widthCm || product.heightCm
+  const dimStr = hasDims
+    ? [product.lengthCm ?? '—', product.widthCm ?? '—', product.heightCm ?? '—'].join(' × ') + ' cm'
+    : undefined
+
+  const hasExtended = !!(
+    product.brand || product.material || product.color ||
+    dimStr || product.weightGrams || (product.tags?.length) || product.notes
+  )
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-black/50 backdrop-blur-[2px]"
+        onClick={onClose}
+      />
+
+      {/* Modal card */}
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden z-10">
+
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-gray-100 flex-shrink-0">
+          <div className="min-w-0">
+            <h2 className="text-base font-bold text-gray-900 leading-tight">{product.name}</h2>
+            <p className="text-[11px] text-gray-400 font-mono mt-0.5">{product.sku}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-500 flex items-center justify-center flex-shrink-0 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex flex-1 min-h-0 overflow-hidden">
+
+          {/* Left — Image (40%) */}
+          <div className="w-2/5 flex-shrink-0 bg-gray-50 flex items-center justify-center p-4 border-r border-gray-100">
+            {product.imageUrl ? (
+              <img
+                src={product.imageUrl}
+                alt={product.name}
+                className="w-full h-full object-contain rounded-xl max-h-64"
+              />
+            ) : (
+              <div className="flex flex-col items-center gap-3 text-gray-200">
+                <Package className="w-20 h-20" />
+                <span className="text-xs text-gray-300 font-medium">No image</span>
+              </div>
+            )}
+          </div>
+
+          {/* Right — Details (60%) */}
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+
+            {/* Price + Stock */}
+            <div className="flex items-center gap-3">
+              <span className="text-2xl font-black text-brand">
+                {`₱${product.price.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`}
+              </span>
+              <span className={`text-xs font-bold px-2 py-1 rounded-lg ${
+                isOut                                          ? 'bg-gray-100 text-gray-400' :
+                product.stock <= product.reorderPoint          ? 'bg-yellow-50 text-yellow-700' :
+                                                                 'bg-green-50 text-green-700'
+              }`}>
+                {isOut ? 'Out of stock' : `${product.stock} in stock`}
+              </span>
+            </div>
+
+            {/* Core info */}
+            <div className="space-y-1.5">
+              <DetailRow label="Category" value={product.category} />
+              <DetailRow label="Barcode"  value={product.barcode}  />
+            </div>
+
+            {/* Description */}
+            {product.description && (
+              <div>
+                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Description</p>
+                <p className="text-sm text-gray-600 leading-relaxed">{product.description}</p>
+              </div>
+            )}
+
+            {/* Extended details */}
+            {hasExtended && (
+              <div>
+                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Details</p>
+                <div className="space-y-1.5">
+                  <DetailRow label="Brand"      value={product.brand}    />
+                  <DetailRow label="Material"   value={product.material} />
+                  <DetailRow label="Color"      value={product.color}    />
+                  <DetailRow label="Dimensions" value={dimStr}           />
+                  <DetailRow label="Weight"     value={product.weightGrams ? `${product.weightGrams} g` : undefined} />
+                </div>
+              </div>
+            )}
+
+            {/* Tags */}
+            {product.tags && product.tags.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {product.tags.map((tag) => (
+                  <span key={tag} className="text-xs bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full font-medium">{tag}</span>
+                ))}
+              </div>
+            )}
+
+            {/* Variants */}
+            {product.variants && product.variants.length > 0 && (
+              <div>
+                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Variants</p>
+                <div className="space-y-1">
+                  {product.variants.map((v) => (
+                    <div key={v.id} className="flex items-center justify-between bg-gray-50 px-3 py-1.5 rounded-lg">
+                      <span className="text-xs font-semibold text-gray-700">{v.label}: {v.value}</span>
+                      <span className="text-xs font-black text-brand">
+                        {`₱${(product.price + v.priceAdjustment).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Footer — Add to Cart */}
+        <div className="flex-shrink-0 px-5 py-4 border-t border-gray-100 bg-white">
+          <button
+            onClick={() => onAddToCart(product)}
+            disabled={isOut}
+            className="w-full flex items-center justify-center gap-2 bg-brand hover:bg-brand-dark disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-3.5 px-4 rounded-xl transition-all shadow-lg shadow-brand/25 text-sm"
+          >
+            <ShoppingCart className="w-4 h-4" />
+            {isOut ? 'Out of Stock' : 'Add to Cart'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

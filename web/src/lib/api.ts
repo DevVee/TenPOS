@@ -182,6 +182,17 @@ interface SupabaseProduct {
   price: number | string; cost: number | string
   image_url: string | null; active: boolean
   created_at: string; updated_at: string
+  // Extended optional fields
+  description:  string | null
+  brand:        string | null
+  material:     string | null
+  color:        string | null
+  weight_grams: number | null
+  length_cm:    number | null
+  width_cm:     number | null
+  height_cm:    number | null
+  tags:         string[] | null
+  notes:        string | null
   categories:       { name: string } | null
   product_variants: { id: string; label: string; value: string; price_adjustment: number }[]
   stock_levels:     { stock: number; reorder_point: number }[]
@@ -200,6 +211,17 @@ function mapProduct(p: SupabaseProduct) {
     stock:         p.stock_levels?.[0]?.stock ?? 0,
     reorder_point: p.stock_levels?.[0]?.reorder_point ?? 5,
     created_at: p.created_at, updated_at: p.updated_at,
+    // Extended optional fields
+    description:  p.description  ?? undefined,
+    brand:        p.brand        ?? undefined,
+    material:     p.material     ?? undefined,
+    color:        p.color        ?? undefined,
+    weight_grams: p.weight_grams ?? undefined,
+    length_cm:    p.length_cm    ?? undefined,
+    width_cm:     p.width_cm     ?? undefined,
+    height_cm:    p.height_cm    ?? undefined,
+    tags:         p.tags         ?? undefined,
+    notes:        p.notes        ?? undefined,
   }
 }
 
@@ -241,15 +263,26 @@ export async function apiCreateProduct(data: Record<string, unknown>) {
   const { data: product, error } = await supabase
     .from('products')
     .insert({
-      branch_id:   staff?.branch_id,
-      category_id: data.category_id as string | null ?? null,
-      name:        data.name as string,
-      sku:         data.sku  as string,
-      barcode:     (data.barcode as string | undefined) ?? null,
-      price:       Number(data.price),
-      cost:        Number(data.cost ?? 0),
-      image_url:   (data.image_url as string | undefined) ?? null,
-      active:      data.active !== false,
+      branch_id:    staff?.branch_id,
+      category_id:  (data.category_id  as string | null) ?? null,
+      name:         data.name           as string,
+      sku:          data.sku            as string,
+      barcode:      (data.barcode       as string | undefined) || null,
+      price:        Number(data.price),
+      cost:         Number(data.cost ?? 0),
+      image_url:    (data.image_url     as string | undefined) || null,
+      active:       data.active !== false,
+      // Extended fields
+      description:  (data.description   as string | undefined) || null,
+      brand:        (data.brand         as string | undefined) || null,
+      material:     (data.material      as string | undefined) || null,
+      color:        (data.color         as string | undefined) || null,
+      weight_grams: data.weight_grams   ? Number(data.weight_grams) : null,
+      length_cm:    data.length_cm      ? Number(data.length_cm)    : null,
+      width_cm:     data.width_cm       ? Number(data.width_cm)     : null,
+      height_cm:    data.height_cm      ? Number(data.height_cm)    : null,
+      tags:         (data.tags          as string[] | undefined)    ?? null,
+      notes:        (data.notes         as string | undefined)      || null,
     })
     .select('id, name, branch_id')
     .single()
@@ -284,12 +317,23 @@ export async function apiUpdateProduct(id: string, data: Record<string, unknown>
   const col: Record<string, unknown> = {}
   if (data.name        !== undefined) col.name        = data.name
   if (data.sku         !== undefined) col.sku         = data.sku
-  if (data.barcode     !== undefined) col.barcode     = data.barcode
+  if (data.barcode     !== undefined) col.barcode     = (data.barcode as string) || null
   if (data.category_id !== undefined) col.category_id = data.category_id
   if (data.price       !== undefined) col.price       = Number(data.price)
   if (data.cost        !== undefined) col.cost        = Number(data.cost)
   if (data.image_url   !== undefined) col.image_url   = data.image_url
   if (data.active      !== undefined) col.active      = data.active
+  // Extended fields
+  if (data.description  !== undefined) col.description  = (data.description  as string) || null
+  if (data.brand        !== undefined) col.brand        = (data.brand        as string) || null
+  if (data.material     !== undefined) col.material     = (data.material     as string) || null
+  if (data.color        !== undefined) col.color        = (data.color        as string) || null
+  if (data.weight_grams !== undefined) col.weight_grams = data.weight_grams ? Number(data.weight_grams) : null
+  if (data.length_cm    !== undefined) col.length_cm    = data.length_cm    ? Number(data.length_cm)    : null
+  if (data.width_cm     !== undefined) col.width_cm     = data.width_cm     ? Number(data.width_cm)     : null
+  if (data.height_cm    !== undefined) col.height_cm    = data.height_cm    ? Number(data.height_cm)    : null
+  if (data.tags         !== undefined) col.tags         = data.tags          ?? null
+  if (data.notes        !== undefined) col.notes        = (data.notes        as string) || null
 
   if (Object.keys(col).length) {
     const { error } = await supabase.from('products').update(col).eq('id', id)
