@@ -2,7 +2,6 @@ import { lazy, Suspense, useEffect, Component } from 'react'
 import type { ReactNode, ErrorInfo } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from './store/authStore'
-import { startSyncLoop, stopSyncLoop, refreshProductCache, refreshInventoryCache } from './lib/sync'
 
 import { AppLayout }  from './components/layout/AppLayout'
 
@@ -165,23 +164,10 @@ function SessionRestorer() {
   return null
 }
 
-function SyncBootstrap() {
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
-  useEffect(() => {
-    if (!isAuthenticated) return
-    refreshProductCache()
-    refreshInventoryCache()
-    startSyncLoop()
-    return () => stopSyncLoop()
-  }, [isAuthenticated])
-  return null
-}
-
 export default function App() {
   return (
     <BrowserRouter>
       <SessionRestorer />
-      <SyncBootstrap />
       <BoundedRoutes />
     </BrowserRouter>
   )

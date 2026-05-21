@@ -1,11 +1,10 @@
 import { useState, useEffect, useMemo, type ElementType } from 'react'
-import { Search, Plus, Minus, Trash2, X, Tag, ChevronRight, Wifi, WifiOff, ArrowLeft, LogOut, Package, ShoppingBag, Loader2, ShoppingCart } from 'lucide-react'
+import { Search, Plus, Minus, Trash2, X, Tag, ChevronRight, Wifi, ArrowLeft, LogOut, Package, ShoppingBag, Loader2, ShoppingCart } from 'lucide-react'
 import { usePOSStore } from '../../store/posStore'
 import { useAuthStore } from '../../store/authStore'
 import type { Product, CartItem } from '../../types'
 import { useNavigate } from 'react-router-dom'
-import { db, type CachedProduct, type CachedInventory } from '../../lib/db'
-import { refreshProductCache, refreshInventoryCache, onSyncEvent } from '../../lib/sync'
+import { apiGetProducts } from '../../lib/api'
 import { subscribeProducts, subscribeStock } from '../../lib/realtime'
 
 const CATEGORY_ICONS: Record<string, ElementType> = {
@@ -15,60 +14,60 @@ const CATEGORY_ICONS: Record<string, ElementType> = {
 
 function fmt(n: number) { return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2 })}` }
 
-function toProduct(p: CachedProduct, inv: CachedInventory[]): Product {
-  const stock        = inv.find((i) => i.product_id === p.id && !i.variant_id)?.stock ?? 0
-  const reorderPoint = inv.find((i) => i.product_id === p.id && !i.variant_id)?.reorder_point ?? 3
-  return {
-    id: p.id, name: p.name, sku: p.sku, barcode: p.barcode ?? '',
-    category: p.category_name ?? p.category_id ?? 'Other',
-    price: p.price, cost: p.cost ?? 0, stock, reorderPoint,
-    imageUrl: p.image_url,
-    variants: p.variants.map((v) => ({
-      id: v.id, label: v.label, value: v.value,
-      priceAdjustment: v.price_adjustment,
-      stock: inv.find((i) => i.product_id === p.id && i.variant_id === v.id)?.stock ?? 0,
-    })),
-  }
-}
-
 export function POSTerminal() {
   const navigate = useNavigate()
-  const { cart, addToCart, removeFromCart, updateQty, clearCart, searchQuery, setSearch, cartSubtotal, syncStatus } = usePOSStore()
+  const { cart, addToCart, removeFromCart, updateQty, clearCart, searchQuery, setSearch, cartSubtotal } = usePOSStore()
   const { user, logout } = useAuthStore()
 
   const [activeCategory, setActiveCategory] = useState('All')
   const [discountInput, setDiscountInput]   = useState<Record<string, string>>({})
-  const [cachedProducts, setCachedProducts] = useState<CachedProduct[]>([])
-  const [inventory, setInventory]           = useState<CachedInventory[]>([])
+  const [products, setProducts]             = useState<Product[]>([])
   const [loading, setLoading]               = useState(true)
   const [mobileCartOpen, setMobileCartOpen] = useState(false)
 
   useEffect(() => {
     let alive = true
+
     const reload = async () => {
-      const [prods, inv] = await Promise.all([db.products.toArray(), db.inventory.toArray()])
-      if (alive) { setCachedProducts(prods.filter((p) => p.active)); setInventory(inv); setLoading(false) }
+      try {
+        const { data } = await apiGetProducts({ limit: '500', active: 'true' })
+        if (!alive) return
+        setProducts(
+          data
+            .filter((p) => p.active)
+            .map((p) => ({
+              id:          p.id,
+              name:        p.name,
+              sku:         p.sku,
+              barcode:     p.barcode ?? '',
+              category:    p.category_name || 'Other',
+              price:       p.price,
+              cost:        p.cost,
+              stock:       p.stock,
+              reorderPoint: p.reorder_point,
+              imageUrl:    p.image_url,
+              variants:    p.variants.map((v) => ({
+                id: v.id, label: v.label, value: v.value,
+                priceAdjustment: v.price_adjustment, stock: 0,
+              })),
+            }))
+        )
+      } catch {
+        // network error — keep existing products shown
+      } finally {
+        if (alive) setLoading(false)
+      }
     }
-    const bootstrap = async () => {
-      await reload()
-      const count = await db.products.count()
-      if (count === 0) { setLoading(true); await Promise.all([refreshProductCache(), refreshInventoryCache()]); await reload() }
-    }
-    bootstrap()
-    const u1 = onSyncEvent('sync:done', reload)
-    const u2 = onSyncEvent('offline:queued', reload)
-    const u3 = subscribeProducts(async () => {
-      await refreshProductCache()
-      await reload()
-    })
-    const u4 = subscribeStock(async () => {
-      await refreshInventoryCache()
-      await reload()
-    })
-    return () => { alive = false; u1(); u2(); u3(); u4() }
+
+    reload()
+
+    // Realtime: re-fetch from Supabase whenever products or stock change
+    const u1 = subscribeProducts(reload)
+    const u2 = subscribeStock(reload)
+
+    return () => { alive = false; u1(); u2() }
   }, [])
 
-  const products = useMemo(() => cachedProducts.map((p) => toProduct(p, inventory)), [cachedProducts, inventory])
   const allCats  = useMemo(() => ['All', ...[...new Set(products.map((p) => p.category).filter(Boolean))].sort()], [products])
   const filtered = products.filter((p) => {
     const matchCat    = activeCategory === 'All' || p.category === activeCategory
@@ -107,12 +106,10 @@ export function POSTerminal() {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Sync badge */}
-          <div className={`hidden sm:flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-lg font-semibold ${
-            syncStatus === 'online' ? 'bg-green-50 text-green-700' : 'bg-yellow-50 text-yellow-700'
-          }`}>
-            {syncStatus === 'online' ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-            <span className="capitalize">{syncStatus}</span>
+          {/* Online indicator */}
+          <div className="hidden sm:flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-lg font-semibold bg-green-50 text-green-700">
+            <Wifi className="w-3 h-3" />
+            <span>Online</span>
           </div>
 
           {/* Mobile cart toggle */}
@@ -291,8 +288,7 @@ export function POSTerminal() {
           </div>
         </div>
 
-        {/* ── RIGHT: Cart ─────────────────────────────────────────────── */}
-        {/* Desktop cart */}
+        {/* ── RIGHT: Cart (Desktop) ─────────────────────────────────── */}
         <div className="hidden lg:flex w-80 xl:w-96 flex-col bg-white border-l border-gray-200/80 shadow-sm">
           <CartPanel
             cart={cart}
