@@ -497,93 +497,39 @@ export async function apiCreateTransaction(payload: {
   discount: number
   voucher_code?: string
 }) {
-  const staff = await getCurrentStaff()
-
-  const subtotal = payload.items.reduce(
-    (s, i) => s + i.unit_price * i.quantity - i.discount, 0,
-  )
-  const total          = Math.max(0, subtotal - payload.discount)
-  const cashPayment    = payload.payments.find((p) => p.method === 'cash')
-  const amountTendered = cashPayment?.amount ?? total
-  const changeGiven    = Math.max(0, amountTendered - total)
-  const receiptNo      = await nextReceiptNo()
-
-  // Insert transaction header
-  const { data: tx, error: txErr } = await supabase
-    .from('transactions')
-    .insert({
-      branch_id: payload.branch_id, staff_id: staff?.id ?? null,
-      receipt_no: receiptNo, subtotal, discount: payload.discount,
-      tax: 0, total, amount_tendered: amountTendered, change_given: changeGiven,
-      payment_method: payload.payments[0]?.method ?? 'cash',
-      voucher_code: payload.voucher_code ?? null, status: 'completed',
-    })
-    .select('id, receipt_no, total')
-    .single()
-  if (txErr) throw new Error(txErr.message)
-
-  // Snapshot product names
-  const productIds = [...new Set(payload.items.map((i) => i.product_id))]
-  const { data: prods } = await supabase.from('products').select('id, name, sku').in('id', productIds)
-  const prodMap = new Map((prods ?? []).map((p) => [p.id as string, p as { id: string; name: string; sku: string }]))
-
-  // Insert items
-  await supabase.from('transaction_items').insert(
-    payload.items.map((item) => {
-      const p = prodMap.get(item.product_id)
-      return {
-        transaction_id: tx.id,
-        product_id: item.product_id, variant_id: item.variant_id ?? null,
-        product_name: p?.name ?? item.product_id, sku: p?.sku ?? '',
-        unit_price: item.unit_price, quantity: item.quantity,
-        discount: item.discount, subtotal: item.unit_price * item.quantity - item.discount,
-        note: item.note ?? null,
-      }
-    }),
-  )
-
-  // Insert payments
-  await supabase.from('transaction_payments').insert(
-    payload.payments.map((p) => ({
-      transaction_id: tx.id, method: p.method, amount: p.amount, reference: p.reference ?? null,
+  // ── SECURE PATH: delegate to create_transaction RPC ──────────────────────
+  // The RPC re-validates prices, stock, branch, voucher, and payment totals
+  // server-side — frontend values for unit_price are deliberately ignored.
+  const { data, error } = await supabase.rpc('create_transaction', {
+    p_branch_id:    payload.branch_id,
+    p_items:        payload.items.map((i) => ({
+      product_id: i.product_id,
+      variant_id: i.variant_id ?? null,
+      quantity:   i.quantity,
+      discount:   i.discount,
+      note:       i.note ?? null,
     })),
-  )
+    p_payments:     payload.payments.map((p) => ({
+      method:    p.method,
+      amount:    p.amount,
+      reference: p.reference ?? null,
+    })),
+    p_discount:     payload.discount,
+    p_voucher_code: payload.voucher_code ?? null,
+  })
 
-  // Deduct stock (best-effort per item)
-  for (const item of payload.items) {
-    const { data: level } = await supabase
-      .from('stock_levels').select('id, stock')
-      .eq('product_id', item.product_id)
-      .eq('branch_id', payload.branch_id)
-      .maybeSingle()
-    if (level) {
-      void supabase.from('stock_levels')
-        .update({ stock: Math.max(0, (level as { id: string; stock: number }).stock - item.quantity) })
-        .eq('id', (level as { id: string; stock: number }).id)
-    }
-  }
+  if (error) throw new Error(error.message)
 
-  // Increment voucher uses
-  if (payload.voucher_code) {
-    const { data: v } = await supabase
-      .from('vouchers').select('id, used_count').eq('code', payload.voucher_code).maybeSingle()
-    if (v) {
-      void supabase.from('vouchers')
-        .update({ used_count: (v as { id: string; used_count: number }).used_count + 1 })
-        .eq('id', (v as { id: string; used_count: number }).id)
-    }
-  }
+  const result = data as { id: string; receipt_no: string; total: number }
 
-  // Increment staff sales count
+  // Keep local staff counter in sync (UI only — not a security decision)
+  const staff = await getCurrentStaff()
   if (staff?.id) {
-    void supabase.from('staff')
-      .update({ sales_count: (staff.sales_count ?? 0) + 1 })
-      .eq('id', staff.id)
+    void supabase.from('staff').update({ sales_count: (staff.sales_count ?? 0) + 1 }).eq('id', staff.id)
     if (_currentStaff) _currentStaff.sales_count = (_currentStaff.sales_count ?? 0) + 1
   }
 
-  void addAudit('TRANSACTION', `Sale ${tx.receipt_no} · ₱${Number(tx.total).toFixed(2)}`, 'info')
-  return { id: tx.id as string, receipt_no: tx.receipt_no as string, total: Number(tx.total) }
+  return { id: result.id, receipt_no: result.receipt_no, total: Number(result.total) }
 }
 
 export async function apiGetTransactions(params?: Record<string, string>) {
@@ -618,30 +564,21 @@ export async function apiGetTransaction(id: string) {
 }
 
 export async function apiVoidTransaction(id: string, reason: string) {
-  const { data: tx, error: fetchErr } = await supabase
-    .from('transactions').select('status, receipt_no, branch_id, transaction_items(*)').eq('id', id).single()
-  if (fetchErr || !tx) throw new Error('Transaction not found')
-  const txData = tx as { status: string; receipt_no: string; branch_id: string; transaction_items: SupabaseTxItem[] }
-  if (txData.status !== 'completed') throw new Error('Transaction already voided or returned')
-
-  const { error } = await supabase.from('transactions').update({
-    status: 'voided', void_reason: reason, voided_at: new Date().toISOString(),
-  }).eq('id', id)
-  if (error) throw new Error(error.message)
-
-  // Restore stock
-  for (const item of (txData.transaction_items ?? [])) {
-    if (!item.product_id) continue
-    const { data: level } = await supabase.from('stock_levels').select('id, stock')
-      .eq('product_id', item.product_id).eq('branch_id', txData.branch_id).maybeSingle()
-    if (level) {
-      void supabase.from('stock_levels')
-        .update({ stock: (level as { id: string; stock: number }).stock + item.quantity })
-        .eq('id', (level as { id: string; stock: number }).id)
-    }
+  // ── SECURE PATH: delegate to void_transaction RPC ─────────────────────────
+  // The RPC enforces manager/admin role in PostgreSQL, validates status,
+  // restores stock atomically, and appends an audit log entry.
+  const { error } = await supabase.rpc('void_transaction', {
+    p_transaction_id: id,
+    p_reason:         reason,
+  })
+  if (error) {
+    // Surface human-readable errors from the RPC
+    const msg = error.message
+    if (msg.includes('FORBIDDEN'))    throw new Error('Only managers and admins can void transactions.')
+    if (msg.includes('NOT_FOUND'))    throw new Error('Transaction not found.')
+    if (msg.includes('INVALID'))      throw new Error(msg.split('INVALID: ')[1] ?? msg)
+    throw new Error(msg)
   }
-
-  void addAudit('VOID', `Voided ${txData.receipt_no}: ${reason}`, 'warning')
   return { ok: true }
 }
 

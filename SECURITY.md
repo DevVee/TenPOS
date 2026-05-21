@@ -1,7 +1,7 @@
 # TenPOS — Security Architecture
 
-> **Status:** Designed, not yet implemented.  
-> Complete this before going to production with real business data.
+> **Status:** Partially implemented — see checklist below.  
+> Run `supabase/migrations/008_security_hardening.sql` in Supabase SQL Editor to complete DB items.
 
 ---
 
@@ -22,22 +22,22 @@ The system must remain secure under all of these. **Frontend is decoration. The 
 
 ### 🔴 Critical — Do Before Any Real Business Data
 
-- [ ] Run `ENABLE ROW LEVEL SECURITY` on all tables (see Section 4)
-- [ ] Deploy `get_my_role()`, `get_my_branch()`, `has_role()` helper functions (see Section 2)
-- [ ] Replace `apiCreateTransaction` with `supabase.rpc('create_transaction', ...)` (see Section 3)
-- [ ] Replace `apiVoidTransaction` with `supabase.rpc('void_transaction', ...)` (see Section 3)
-- [ ] Enable **Refresh Token Reuse Detection** in Supabase → Auth → Settings
-- [ ] Set login rate limits in Supabase → Auth → Rate Limits (10 attempts/hour)
-- [ ] Confirm service role key is **not** in any committed file or Vercel env var
-- [ ] Add `stock >= 0` constraint on `stock_levels` table
-- [ ] Verify audit_log has **no** UPDATE or DELETE policies
+- [x] Run `ENABLE ROW LEVEL SECURITY` on all tables — **done in 002_rls.sql**
+- [x] Deploy `get_my_role()`, `get_my_branch()`, `has_role()` helper functions — **done in 008_security_hardening.sql** (run it!)
+- [x] Replace `apiCreateTransaction` with `supabase.rpc('create_transaction', ...)` — **done in web/src/lib/api.ts**
+- [x] Replace `apiVoidTransaction` with `supabase.rpc('void_transaction', ...)` — **done in web/src/lib/api.ts**
+- [ ] **MANUAL:** Enable **Refresh Token Reuse Detection** in Supabase → Auth → Settings
+- [ ] **MANUAL:** Set login rate limits in Supabase → Auth → Rate Limits (10 attempts/hour)
+- [ ] **MANUAL:** Confirm service role key is **not** in any committed file or Vercel env var
+- [x] Add `stock >= 0` constraint on `stock_levels` table — **done in 008_security_hardening.sql** (run it!)
+- [x] Verify audit_log has **no** UPDATE or DELETE policies — confirmed (002_rls.sql has only SELECT + INSERT)
 
 ### 🟡 High — Do Before Launch
 
-- [ ] Add CSP security headers to `web/vercel.json` (see Section 5)
-- [ ] Add `total > 0` and `discount <= subtotal` constraints on `transactions`
-- [ ] Add self-role-escalation trigger on `staff` table (see Section 4)
-- [ ] Confirm no `dangerouslySetInnerHTML` anywhere in web app
+- [x] Add CSP + security headers to `web/vercel.json` — **done** (X-Frame-Options, CSP, HSTS, nosniff, XSS-Protection)
+- [x] Add `total > 0` and `discount <= subtotal` constraints — **done in 008_security_hardening.sql** (run it!)
+- [x] Add self-role-escalation trigger on `staff` table — **done in 008_security_hardening.sql** (run it!)
+- [x] Confirm no `dangerouslySetInnerHTML` anywhere in web app — verified clean (React JSX only)
 
 ### 🟢 Good to Have — Before Scale
 
