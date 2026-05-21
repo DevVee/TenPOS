@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { ShoppingBag, Package, AlertTriangle, DollarSign, Users, Loader2 } from 'lucide-react'
 import { StatCard } from '../../components/ui/StatCard'
 import { Badge } from '../../components/ui/Badge'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { useNavigate } from 'react-router-dom'
 import { apiSalesReport, apiGetTransactions, apiGetLowStock } from '../../lib/api'
+import { subscribeTransactions, subscribeStock } from '../../lib/realtime'
 import {
   ResponsiveContainer, XAxis, YAxis, CartesianGrid,
   Tooltip, AreaChart, Area,
@@ -25,29 +26,32 @@ export function Dashboard() {
   const [lowStock, setLowStock] = useState<LowStockItem[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    let alive = true
-    const load = async () => {
-      try {
-        const [sales, txns, ls] = await Promise.all([
-          apiSalesReport({ from: today + 'T00:00:00', to: today + 'T23:59:59' }) as Promise<SalesData>,
-          apiGetTransactions({ limit: '5', sort: 'desc' }) as Promise<{ data: Transaction[] }>,
-          apiGetLowStock() as Promise<LowStockItem[]>,
-        ])
-        if (alive) {
-          setSalesData(sales)
-          setTransactions(txns.data ?? [])
-          setLowStock(Array.isArray(ls) ? ls.slice(0, 5) : [])
-        }
-      } catch {
-        // silently fallback — UI shows dashes
-      } finally {
-        if (alive) setLoading(false)
-      }
+  const load = useCallback(async () => {
+    try {
+      const [sales, txns, ls] = await Promise.all([
+        apiSalesReport({ from: today + 'T00:00:00', to: today + 'T23:59:59' }) as Promise<SalesData>,
+        apiGetTransactions({ limit: '5', sort: 'desc' }) as Promise<{ data: Transaction[] }>,
+        apiGetLowStock() as Promise<LowStockItem[]>,
+      ])
+      setSalesData(sales)
+      setTransactions(txns.data ?? [])
+      setLowStock(Array.isArray(ls) ? ls.slice(0, 5) : [])
+    } catch {
+      // silently fallback — UI shows dashes
+    } finally {
+      setLoading(false)
     }
-    load()
-    return () => { alive = false }
   }, [today])
+
+  // Initial load
+  useEffect(() => { load() }, [load])
+
+  // Live updates — re-fetch whenever a transaction or stock level changes
+  useEffect(() => {
+    const u1 = subscribeTransactions(load)
+    const u2 = subscribeStock(load)
+    return () => { u1(); u2() }
+  }, [load])
 
   const summary = salesData?.summary
   const chartData = (salesData?.salesByPeriod ?? []).map((p) => ({

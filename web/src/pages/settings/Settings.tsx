@@ -18,9 +18,15 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
       role="switch"
       aria-checked={checked}
       onClick={(e) => { e.stopPropagation(); onChange(!checked) }}
-      className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${checked ? 'bg-brand' : 'bg-gray-200'}`}
+      className={`relative w-11 h-6 rounded-full transition-colors duration-200 flex-shrink-0 p-0 focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 ${
+        checked ? 'bg-brand' : 'bg-gray-300'
+      }`}
     >
-      <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${checked ? 'translate-x-5' : 'translate-x-0.5'}`} />
+      <span
+        className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-md transition-transform duration-200 ${
+          checked ? 'translate-x-5' : 'translate-x-0'
+        }`}
+      />
     </button>
   )
 }

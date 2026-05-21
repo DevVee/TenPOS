@@ -1,10 +1,11 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Search, Plus, Download, Upload, Loader2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Badge } from '../../components/ui/Badge'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { apiGetInventory } from '../../lib/api'
 import { useApiData } from '../../hooks/useApiData'
+import { subscribeProducts, subscribeStock } from '../../lib/realtime'
 import { downloadCSV } from '../../lib/csvExport'
 
 function fmt(n: number) { return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2 })}` }
@@ -29,9 +30,16 @@ export function InventoryList() {
   const [category, setCategory] = useState('All')
   const [importMsg, setImportMsg] = useState('')
 
-  const { data, loading, error } = useApiData<InventoryItem[]>(
+  const { data, loading, error, refetch } = useApiData<InventoryItem[]>(
     () => apiGetInventory() as Promise<InventoryItem[]>
   )
+
+  // Live updates — refetch whenever products or stock levels change
+  useEffect(() => {
+    const u1 = subscribeProducts(refetch)
+    const u2 = subscribeStock(refetch)
+    return () => { u1(); u2() }
+  }, [refetch])
 
   const products = data ?? []
 
