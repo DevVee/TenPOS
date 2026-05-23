@@ -194,11 +194,19 @@ export function SalesReport() {
 
   return (
     <div>
+      {/* ─── Print-only report header ─────────────────────────────────────── */}
+      <div className="print-only print-report-header">
+        <h1>Sales Report</h1>
+        <p>Period: {periodLabel(period, customFrom, customTo)}</p>
+        <p>Branch: {activeBranchLabel}</p>
+        <p>Generated: {new Date().toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short' })}</p>
+      </div>
+
       <PageHeader
         title="Sales Report"
         subtitle={`${periodLabel(period, customFrom, customTo)} · ${activeBranchLabel}`}
         actions={
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="no-print flex flex-wrap items-center gap-2">
             {/* Branch filter (admins only) */}
             {isAdmin && branches.length > 0 && (
               <div className="flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-gray-200 bg-white text-xs text-gray-600">

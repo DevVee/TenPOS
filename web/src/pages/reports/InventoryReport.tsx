@@ -162,13 +162,24 @@ export function InventoryReport() {
     )
   }
 
+  const activeBranchLabel = branchFilter
+    ? (branches.find((b) => b.id === branchFilter)?.name ?? 'Branch')
+    : 'All Branches'
+
   return (
     <div>
+      {/* ─── Print-only report header ─────────────────────────────────────── */}
+      <div className="print-only print-report-header">
+        <h1>Inventory Report</h1>
+        <p>Branch: {activeBranchLabel}</p>
+        <p>Generated: {new Date().toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short' })}</p>
+      </div>
+
       <PageHeader
         title="Inventory Report"
-        subtitle={`Stock movement · ${branchFilter ? (branches.find((b) => b.id === branchFilter)?.name ?? 'Branch') : 'All Branches'}`}
+        subtitle={`Stock movement · ${activeBranchLabel}`}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="no-print flex items-center gap-2">
             {isAdmin && branches.length > 0 && (
               <div className="flex items-center gap-1.5 h-9 px-2.5 rounded-lg border border-gray-200 bg-white text-xs text-gray-600">
                 <MapPin className="w-3 h-3 text-gray-400 flex-shrink-0" />
@@ -219,8 +230,8 @@ export function InventoryReport() {
             )}
           </div>
 
-          {/* â”€â”€ Filters bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
-          <div className="flex flex-wrap gap-2 mb-3">
+          {/* ── Filters bar ─────────────────────────────────────────────────── */}
+          <div className=”no-print flex flex-wrap gap-2 mb-3”>
             {/* Search */}
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />

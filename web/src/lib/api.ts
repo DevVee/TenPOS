@@ -687,9 +687,10 @@ export async function apiGetTransactions(params?: Record<string, string>) {
   let q = supabase.from('transactions')
     .select(TX_SELECT, { count: 'exact' })
 
-  if (params?.status) q = q.eq('status', params.status === 'returned' ? 'refunded' : params.status)
-  if (params?.from)   q = q.gte('created_at', params.from)
-  if (params?.to)     q = q.lte('created_at', params.to)
+  if (params?.status)    q = q.eq('status', params.status === 'returned' ? 'refunded' : params.status)
+  if (params?.branch_id) q = q.eq('branch_id', params.branch_id)
+  if (params?.from)      q = q.gte('created_at', params.from)
+  if (params?.to)        q = q.lte('created_at', params.to)
   if (params?.search) {
     const s = sanitizeSearchTerm(params.search)
     if (s) {

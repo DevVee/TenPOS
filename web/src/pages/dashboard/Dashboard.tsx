@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   ShoppingBag, Package, AlertTriangle, DollarSign,
-  Loader2, ShoppingCart, TrendingUp, ArrowRight,
+  Loader2, ShoppingCart, TrendingUp, ArrowRight, MapPin,
 } from 'lucide-react'
 import { StatCard } from '../../components/ui/StatCard'
 import { Badge } from '../../components/ui/Badge'
@@ -10,6 +10,8 @@ import { EmptyState } from '../../components/ui/EmptyState'
 import { useNavigate } from 'react-router-dom'
 import { apiSalesReport, apiGetTransactions, apiGetLowStock } from '../../lib/api'
 import { subscribeTransactions, subscribeStock } from '../../lib/realtime'
+import { useActiveBranch } from '../../hooks/useActiveBranch'
+import { useBranchStore } from '../../store/branchStore'
 import {
   ResponsiveContainer, XAxis, YAxis, CartesianGrid,
   Tooltip, AreaChart, Area,
@@ -70,6 +72,8 @@ function stockPct(item: LowStockItem) {
 
 export function Dashboard() {
   const navigate = useNavigate()
+  const activeBranch = useActiveBranch()
+  const { activeBranchName } = useBranchStore()
   const today     = new Date().toISOString().slice(0, 10)
   const yesterday = new Date(Date.now() - 864e5).toISOString().slice(0, 10)
 
@@ -81,11 +85,12 @@ export function Dashboard() {
 
   const load = useCallback(async () => {
     try {
+      const branchParam = activeBranch ? { branch_id: activeBranch } : {}
       const [sales, yest, txns, ls] = await Promise.all([
-        apiSalesReport({ from: today     + 'T00:00:00', to: today     + 'T23:59:59' }) as Promise<SalesData>,
-        apiSalesReport({ from: yesterday + 'T00:00:00', to: yesterday + 'T23:59:59' }) as Promise<SalesData>,
-        apiGetTransactions({ limit: '6', sort: 'desc' }) as Promise<{ data: Transaction[] }>,
-        apiGetLowStock() as Promise<LowStockItem[]>,
+        apiSalesReport({ from: today     + 'T00:00:00', to: today     + 'T23:59:59', ...branchParam }) as Promise<SalesData>,
+        apiSalesReport({ from: yesterday + 'T00:00:00', to: yesterday + 'T23:59:59', ...branchParam }) as Promise<SalesData>,
+        apiGetTransactions({ limit: '6', sort: 'desc', ...branchParam }) as Promise<{ data: Transaction[] }>,
+        apiGetLowStock(activeBranch ?? undefined) as Promise<LowStockItem[]>,
       ])
       setSalesData(sales)
       setYestData(yest)
@@ -93,7 +98,7 @@ export function Dashboard() {
       setLowStock(Array.isArray(ls) ? ls.slice(0, 5) : [])
     } catch { /* silent */ }
     finally { setLoading(false) }
-  }, [today, yesterday])
+  }, [today, yesterday, activeBranch])
 
   useEffect(() => { load() }, [load])
   useEffect(() => {
@@ -128,7 +133,17 @@ export function Dashboard() {
     <div>
       <PageHeader
         title="Dashboard"
-        subtitle={`${new Date().toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}`}
+        subtitle={
+          <span className="flex items-center gap-2 flex-wrap">
+            <span>{new Date().toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</span>
+            {activeBranchName && (
+              <span className="flex items-center gap-1 text-xs font-medium px-2 py-0.5 bg-brand-pale text-brand rounded-full">
+                <MapPin className="w-3 h-3" />
+                {activeBranchName}
+              </span>
+            )}
+          </span>
+        }
         actions={
           <button onClick={() => navigate('/pos')} className="btn-primary">
             <ShoppingCart className="w-3.5 h-3.5" />

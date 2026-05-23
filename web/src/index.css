@@ -291,59 +291,102 @@
   }
 }
 
-/* ── Print styles ─────────────────────────────────────────────────────────────── */
-/* Formats the receipt for a 80mm thermal printer and hides chrome UI */
+/* ── Print-only utility ──────────────────────────────────────────────────────── */
+/* Elements with this class are invisible on screen but visible when printing   */
+.print-only { display: none; }
 
+/* ── Print styles ─────────────────────────────────────────────────────────────── */
 @media print {
-  /* Hide navigation, buttons, and offline badges */
+  /* ── Show/hide ──────────────────────────────────────────────────────────── */
+  /* Reveal print-only blocks (report headers, signatures, etc.) */
+  .print-only { display: block !important; }
+
+  /* Hide all interactive chrome */
   header, nav, aside, footer,
   .btn-primary, .btn-secondary, .btn-ghost, .btn-danger,
+  .no-print,
   [class*="print:hidden"] { display: none !important; }
 
+  /* ── Page / body ────────────────────────────────────────────────────────── */
   body, html {
     background: white !important;
-    font-size: 11pt;
+    font-size: 10pt;
   }
 
-  /* ── Black & white thermal output ───────────────────────────────────────── */
-  /* Force all text to black — no colors on thermal paper */
+  /* A4 by default — reports, lists, transaction pages */
+  @page {
+    size: A4 portrait;
+    margin: 14mm 16mm;
+  }
+
+  /* ── Thermal receipt override ───────────────────────────────────────────── */
+  /* Wrap the Receipt page content in <div className="thermal-receipt"> to
+     trigger the 80mm paper size and thermal-specific rules.               */
+  .thermal-receipt {
+    max-width: 72mm !important;
+    margin: 0 auto !important;
+  }
+  .thermal-receipt ~ * { display: none !important; }
+
+  @page thermal {
+    size: 80mm auto;
+    margin: 8mm 4mm;
+  }
+  .thermal-receipt { page: thermal; }
+
+  /* ── Colour reset ───────────────────────────────────────────────────────── */
   * {
     color: #000 !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
-  /* Strip all colored backgrounds */
+
+  /* Strip coloured backgrounds — keeps borders/text readable */
   [class*="bg-brand"],
   [class*="bg-green-"],  [class*="bg-red-"],
   [class*="bg-amber-"],  [class*="bg-yellow-"],
   [class*="bg-blue-"],   [class*="bg-emerald-"],
+  [class*="bg-violet-"], [class*="bg-purple-"],
   [class*="bg-gray-"] { background: transparent !important; }
 
-  /* Receipt card — no shadow, no border, full width */
-  .card {
+  /* ── Cards / layout ─────────────────────────────────────────────────────── */
+  .card, .card-elevated {
     box-shadow: none !important;
-    border: none !important;
+    border: 1px solid #e5e7eb !important;
     border-radius: 0 !important;
     background: white !important;
+    break-inside: avoid;
   }
 
-  /* Print-friendly monospace text */
-  .font-mono { font-family: 'Courier New', Courier, monospace !important; }
+  /* Full-width tables */
+  table { width: 100% !important; }
+  th, td { font-size: 9pt !important; padding: 5px 8px !important; }
 
-  /* Center the receipt and limit to thermal paper width */
-  .max-w-sm { max-width: 72mm !important; margin: 0 auto !important; }
+  /* Stat cards in a row */
+  .grid { display: grid !important; }
 
-  /* Dashed lines look better on print */
-  .border-dashed { border-style: dashed !important; }
-
-  /* Remove padding on the outer wrapper */
-  .p-5, .p-6 { padding: 0 !important; }
-
-  /* Page margins */
-  @page {
-    size: 80mm auto;
-    margin: 8mm 4mm;
+  /* ── Report-specific ────────────────────────────────────────────────────── */
+  /* Print header — company name, report title, period, branch */
+  .print-report-header {
+    border-bottom: 2px solid #111;
+    padding-bottom: 10px;
+    margin-bottom: 16px;
   }
+  .print-report-header h1 { font-size: 16pt; font-weight: 700; margin: 0 0 2px; }
+  .print-report-header p  { font-size: 9pt;  color: #555 !important; margin: 1px 0; }
+
+  /* Charts: keep visible but constrain height */
+  .recharts-wrapper { max-height: 180px !important; overflow: hidden !important; }
+
+  /* Pagination, search, filter bars — hide */
+  input[type="text"],
+  input[type="search"],
+  input[type="date"],
+  select { border: none !important; padding: 0 !important; background: transparent !important; }
+
+  /* ── Thermal-specific (inside .thermal-receipt) ─────────────────────────── */
+  .thermal-receipt .font-mono { font-family: 'Courier New', Courier, monospace !important; }
+  .thermal-receipt .border-dashed { border-style: dashed !important; }
 }
 
 /* ── Animations ──────────────────────────────────────────────────────────────── */

@@ -59,8 +59,8 @@ export function Receipt() {
 
   return (
     <div className="max-w-sm mx-auto">
-      {/* Actions */}
-      <div className="flex gap-2 mb-4">
+      {/* Actions — hidden when printing */}
+      <div className="flex gap-2 mb-4 no-print">
         <button
           onClick={() => window.print()}
           className="btn-secondary flex items-center gap-1.5 flex-1 justify-center"
@@ -69,15 +69,16 @@ export function Receipt() {
         </button>
       </div>
 
-      {/* Offline badge */}
+      {/* Offline badge — hidden when printing */}
       {receipt.offline && (
-        <div className="flex items-center gap-2 bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2 mb-4 text-xs text-yellow-700 font-medium">
+        <div className="flex items-center gap-2 bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2 mb-4 text-xs text-yellow-700 font-medium no-print">
           <WifiOff className="w-3.5 h-3.5" />
           Saved offline — will sync when connected
         </div>
       )}
 
-      {/* Receipt card */}
+      {/* Receipt card — thermal-receipt triggers 80mm @page size */}
+      <div className="thermal-receipt">
       <div className="card p-5 font-mono text-sm">
         {/* Header */}
         <div className="text-center mb-4 border-b border-dashed border-gray-200 pb-4">
@@ -153,11 +154,12 @@ export function Receipt() {
           <p className="text-[10px] text-gray-300 mt-1">Ref: {id}</p>
         </div>
       </div>
+      </div>{/* /thermal-receipt */}
 
-      {/* New sale */}
+      {/* New sale — hidden when printing */}
       <button
         onClick={() => navigate('/pos')}
-        className="btn-primary w-full flex items-center justify-center gap-2 py-3 mt-4"
+        className="btn-primary w-full flex items-center justify-center gap-2 py-3 mt-4 no-print"
       >
         <ShoppingCart className="w-4 h-4" /> New Sale
       </button>

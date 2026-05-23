@@ -124,11 +124,19 @@ export function FinancialReport() {
 
   return (
     <div>
+      {/* ─── Print-only report header ─────────────────────────────────────── */}
+      <div className="print-only print-report-header">
+        <h1>Financial Report — P&amp;L</h1>
+        <p>Period: {periodLabel}</p>
+        <p>Branch: {activeBranchLabel}</p>
+        <p>Generated: {new Date().toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short' })}</p>
+      </div>
+
       <PageHeader
         title="Financial Report"
         subtitle={`P&L · ${periodLabel} · ${activeBranchLabel}`}
         actions={
-          <div className="flex flex-wrap gap-2 items-center">
+          <div className="no-print flex flex-wrap gap-2 items-center">
             {/* Branch filter (admins only) */}
             {isAdmin && branches.length > 0 && (
               <div className="flex items-center gap-1.5 h-9 px-2.5 rounded-lg border border-gray-200 bg-white text-xs text-gray-600">

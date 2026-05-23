@@ -8,6 +8,7 @@ import { apiGetInventory } from '../../lib/api'
 import { useApiData } from '../../hooks/useApiData'
 import { subscribeProducts, subscribeStock } from '../../lib/realtime'
 import { downloadXLSX } from '../../lib/xlsxExport'
+import { useActiveBranch } from '../../hooks/useActiveBranch'
 
 function fmt(n: number) { return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2 })}` }
 
@@ -45,12 +46,14 @@ function StockBar({ stock, reorder }: { stock: number; reorder: number }) {
 
 export function InventoryList() {
   const navigate  = useNavigate()
+  const activeBranch = useActiveBranch()
   const [search,    setSearch]    = useState('')
   const [category,  setCategory]  = useState('All')
   const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'out'>('all')
 
   const { data, loading, error, refetch } = useApiData<InventoryItem[]>(
-    () => apiGetInventory() as Promise<InventoryItem[]>
+    () => apiGetInventory(activeBranch ?? undefined) as Promise<InventoryItem[]>,
+    [activeBranch]
   )
 
   useEffect(() => {
@@ -111,11 +114,18 @@ export function InventoryList() {
 
   return (
     <div>
+      {/* ─── Print-only report header ─────────────────────────────────────── */}
+      <div className="print-only print-report-header">
+        <h1>Inventory List</h1>
+        <p>{products.length} products · Stock value {fmt(stockValue)}</p>
+        <p>Generated: {new Date().toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short' })}</p>
+      </div>
+
       <PageHeader
         title="Inventory"
         subtitle={loading ? 'Loading…' : `${products.length} products · Stock value ${fmt(stockValue)}`}
         actions={
-          <div className="flex gap-2">
+          <div className="no-print flex gap-2">
             <button onClick={handleExport} className="btn-secondary">
               <Download className="w-3.5 h-3.5" /> Export
             </button>
@@ -132,7 +142,7 @@ export function InventoryList() {
       )}
 
       {/* KPI strip */}
-      <div className="grid grid-cols-3 gap-3 mb-5">
+      <div className="no-print grid grid-cols-3 gap-3 mb-5">
         <div className="card p-4">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
@@ -171,7 +181,7 @@ export function InventoryList() {
       </div>
 
       {/* Filter bar */}
-      <div className="flex flex-wrap items-center gap-3 mb-4">
+      <div className="no-print flex flex-wrap items-center gap-3 mb-4">
         {/* Search */}
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
@@ -320,7 +330,7 @@ export function InventoryList() {
               </table>
             </div>
 
-            <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between">
+            <div className="no-print px-4 py-3 border-t border-gray-100 flex items-center justify-between">
               <p className="text-xs text-gray-400">
                 Showing <span className="font-medium text-gray-600">{filtered.length}</span> of {products.length} products
               </p>

@@ -1,6 +1,6 @@
 interface PageHeaderProps {
   title: string
-  subtitle?: string
+  subtitle?: React.ReactNode
   actions?: React.ReactNode
   /** Compact variant — less bottom margin, smaller title */
   compact?: boolean
