@@ -83,6 +83,7 @@ export function Payment() {
       )
       navigate(`/pos/receipt/${result.id}`, {
         state: {
+          autoPrint: true,   // triggers window.print() on the receipt page
           transaction: {
             receiptNo:    result.receipt_no,
             offline:      result.offline,

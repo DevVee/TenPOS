@@ -321,16 +321,16 @@
 
   /* ── Thermal receipt override ───────────────────────────────────────────── */
   /* Wrap the Receipt page content in <div className="thermal-receipt"> to
-     trigger the 80mm paper size and thermal-specific rules.               */
+     trigger the 58mm paper size (57.5mm roll) and thermal-specific rules. */
   .thermal-receipt {
-    max-width: 72mm !important;
+    max-width: 54mm !important;
     margin: 0 auto !important;
   }
   .thermal-receipt ~ * { display: none !important; }
 
   @page thermal {
-    size: 80mm auto;
-    margin: 8mm 4mm;
+    size: 58mm auto;
+    margin: 4mm 3mm;
   }
   .thermal-receipt { page: thermal; }
 

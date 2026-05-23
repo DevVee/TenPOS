@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { useNavigate, useLocation, useParams } from 'react-router-dom'
 import { Printer, ShoppingCart, WifiOff } from 'lucide-react'
 import { useSettingsStore } from '../../store/settingsStore'
@@ -33,13 +34,25 @@ export function Receipt() {
   const navigate = useNavigate()
   const { id } = useParams()
   const location = useLocation()
-  const receipt = (location.state as { transaction?: ReceiptData } | null)?.transaction
+  const state = location.state as { transaction?: ReceiptData; autoPrint?: boolean } | null
+  const receipt   = state?.transaction
+  const autoPrint = state?.autoPrint ?? false
   const { storeName, address } = useSettingsStore()
   const { user } = useAuthStore()
   const { activeBranchName, activeBranchAddress } = useBranchStore()
 
   const displayName    = activeBranchName    ?? storeName
   const displayAddress = activeBranchAddress ?? address
+
+  // Auto-print: fires once when coming from a completed payment (autoPrint flag set)
+  const didPrint = useRef(false)
+  useEffect(() => {
+    if (!autoPrint || !receipt || didPrint.current) return
+    didPrint.current = true
+    // Small delay lets the browser finish rendering the receipt before opening print dialog
+    const t = setTimeout(() => window.print(), 350)
+    return () => clearTimeout(t)
+  }, [autoPrint, receipt])
 
   const dateObj = receipt?.created_at ? new Date(receipt.created_at) : new Date()
   const date = dateObj.toLocaleDateString('en-PH', {
