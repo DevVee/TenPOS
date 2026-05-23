@@ -1,11 +1,13 @@
 ﻿import { useState } from 'react'
-import { Download, Printer, Loader2, TrendingUp, TrendingDown, DollarSign, ShoppingBag } from 'lucide-react'
+import { Download, Printer, Loader2, TrendingUp, TrendingDown, DollarSign, ShoppingBag, MapPin } from 'lucide-react'
 import { downloadXLSX } from '../../lib/xlsxExport'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatCard } from '../../components/ui/StatCard'
-import { apiFinancialReport } from '../../lib/api'
+import { apiFinancialReport, apiGetBranches } from '../../lib/api'
 import { useApiData } from '../../hooks/useApiData'
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts'
+import { useAuthStore } from '../../store/authStore'
+import { useBranchStore } from '../../store/branchStore'
 
 function fmt(n: number) { return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2 })}` }
 function isoDate(d: Date) { return d.toISOString().slice(0, 10) }
@@ -21,17 +23,36 @@ interface FinancialData {
 }
 
 export function FinancialReport() {
+  const { user } = useAuthStore()
+  const { activeBranchId } = useBranchStore()
+  const isAdmin = user?.role === 'admin'
+
   const today = isoDate(new Date())
-  const [dateFrom, setDateFrom] = useState(today)
-  const [dateTo,   setDateTo]   = useState(today)
+  const [dateFrom,     setDateFrom]     = useState(today)
+  const [dateTo,       setDateTo]       = useState(today)
+  const defaultBranch = isAdmin ? (activeBranchId ?? '') : (user?.branch_id ?? '')
+  const [branchFilter, setBranchFilter] = useState(defaultBranch)
+
+  const { data: branchData } = useApiData<{ id: string; name: string }[]>(
+    () => isAdmin ? apiGetBranches() as Promise<{ id: string; name: string }[]> : Promise.resolve([]),
+    []
+  )
+  const branches = branchData ?? []
+
+  const queryParams = {
+    from: dateFrom + 'T00:00:00',
+    to:   dateTo   + 'T23:59:59',
+    ...(branchFilter ? { branch_id: branchFilter } : {}),
+  }
 
   const { data, loading } = useApiData<FinancialData>(
-    () => apiFinancialReport({
-      from: dateFrom + 'T00:00:00',
-      to:   dateTo   + 'T23:59:59',
-    }) as unknown as Promise<FinancialData>,
-    [dateFrom, dateTo]
+    () => apiFinancialReport(queryParams) as unknown as Promise<FinancialData>,
+    [dateFrom, dateTo, branchFilter]
   )
+
+  const activeBranchLabel = branchFilter
+    ? (branches.find((b) => b.id === branchFilter)?.name ?? user?.branch ?? 'Branch')
+    : 'All Branches'
 
   const payments      = Object.entries(data?.paymentBreakdown ?? {}).map(([method, total]) => ({ method, total }))
   const totalPayments = payments.reduce((s, p) => s + p.total, 0)
@@ -105,9 +126,23 @@ export function FinancialReport() {
     <div>
       <PageHeader
         title="Financial Report"
-        subtitle={`P&L and payment breakdown Â· ${periodLabel}`}
+        subtitle={`P&L · ${periodLabel} · ${activeBranchLabel}`}
         actions={
           <div className="flex flex-wrap gap-2 items-center">
+            {/* Branch filter (admins only) */}
+            {isAdmin && branches.length > 0 && (
+              <div className="flex items-center gap-1.5 h-9 px-2.5 rounded-lg border border-gray-200 bg-white text-xs text-gray-600">
+                <MapPin className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                <select
+                  value={branchFilter}
+                  onChange={(e) => setBranchFilter(e.target.value)}
+                  className="bg-transparent text-xs text-gray-700 font-medium outline-none cursor-pointer"
+                >
+                  <option value="">All Branches</option>
+                  {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+              </div>
+            )}
             {/* Date range */}
             <div className="flex items-center gap-1.5 text-xs">
               <label className="text-gray-400 text-xs font-medium">From</label>

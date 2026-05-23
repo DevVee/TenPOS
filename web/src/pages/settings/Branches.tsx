@@ -1,9 +1,10 @@
-import { useState, useCallback } from 'react'
-import { Plus, MapPin, Monitor, Edit, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { useState, useCallback, useEffect, useRef } from 'react'
+import { Plus, MapPin, Monitor, Edit, Loader2, AlertCircle, CheckCircle2, Search, Users } from 'lucide-react'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { Badge } from '../../components/ui/Badge'
 import { Modal } from '../../components/ui/Modal'
-import { apiGetBranches, apiCreateBranch, apiUpdateBranch } from '../../lib/api'
+import { AddressAutocomplete } from '../../components/ui/AddressAutocomplete'
+import { apiGetBranches, apiCreateBranch, apiUpdateBranch, apiGetStaff } from '../../lib/api'
 import { useApiData } from '../../hooks/useApiData'
 import { useBranchStore } from '../../store/branchStore'
 import { useAuthStore } from '../../store/authStore'
@@ -17,15 +18,85 @@ interface Branch {
   active: boolean
 }
 
+interface StaffOption { id: string; name: string; role: string }
+
 const BLANK = { name: '', address: '', manager_name: '', terminal_count: '1' }
 
+// ── Manager search combobox ───────────────────────────────────────────────────
+function ManagerPicker({
+  value, onChange, staffList,
+}: { value: string; onChange: (v: string) => void; staffList: StaffOption[] }) {
+  const [query, setQuery]   = useState(value)
+  const [open,  setOpen]    = useState(false)
+  const ref                 = useRef<HTMLDivElement>(null)
+
+  // Keep query in sync when parent resets form
+  useEffect(() => { setQuery(value) }, [value])
+
+  useEffect(() => {
+    const h = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [])
+
+  const filtered = query.trim().length > 0
+    ? staffList.filter((s) => s.name.toLowerCase().includes(query.toLowerCase()))
+    : staffList
+
+  const handleSelect = (s: StaffOption) => {
+    setQuery(s.name)
+    onChange(s.name)
+    setOpen(false)
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <div className="relative">
+        <Users className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+        <input
+          className="input-base pl-9"
+          placeholder="Search managers or type a name…"
+          value={query}
+          onChange={(e) => { setQuery(e.target.value); onChange(e.target.value); setOpen(true) }}
+          onFocus={() => setOpen(true)}
+          autoComplete="off"
+        />
+      </div>
+      {open && filtered.length > 0 && (
+        <ul className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-panel overflow-hidden max-h-48 overflow-y-auto">
+          {filtered.map((s) => (
+            <li
+              key={s.id}
+              onMouseDown={(e) => { e.preventDefault(); handleSelect(s) }}
+              className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-gray-50 cursor-pointer border-b border-gray-50 last:border-0 transition-colors"
+            >
+              <div className="w-6 h-6 rounded-full bg-brand/10 flex items-center justify-center flex-shrink-0">
+                <span className="text-[10px] font-bold text-brand">{s.name.charAt(0).toUpperCase()}</span>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-800">{s.name}</p>
+                <p className="text-xs text-gray-400 capitalize">{s.role}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
+
 export function Branches() {
-  const [modal, setModal]       = useState(false)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [form, setForm]         = useState(BLANK)
-  const [saving, setSaving]     = useState(false)
-  const [saveError, setSaveError] = useState('')
-  const [tick, setTick]         = useState(0)
+  const [modal,      setModal]      = useState(false)
+  const [editingId,  setEditingId]  = useState<string | null>(null)
+  const [form,       setForm]       = useState(BLANK)
+  const [saving,     setSaving]     = useState(false)
+  const [saveError,  setSaveError]  = useState('')
+  const [tick,       setTick]       = useState(0)
+  const [staffList,  setStaffList]  = useState<StaffOption[]>([])
 
   const { user } = useAuthStore()
   const { activeBranchId, setActiveBranch } = useBranchStore()
@@ -38,6 +109,17 @@ export function Branches() {
   )
   const { data, loading, error } = useApiData(fetchBranches, [tick])
   const branches = data ?? []
+
+  // Pre-load manager/admin staff for the picker
+  useEffect(() => {
+    apiGetStaff({ limit: '999' }).then((res) => {
+      const list = (res as { data?: StaffOption[] }).data ?? (res as StaffOption[])
+      const managers = (Array.isArray(list) ? list : []).filter(
+        (s: StaffOption) => s.role === 'manager' || s.role === 'admin'
+      )
+      setStaffList(managers)
+    }).catch(() => {})
+  }, [])
 
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }))
 
@@ -73,6 +155,10 @@ export function Branches() {
     try {
       if (editingId) {
         await apiUpdateBranch(editingId, payload)
+        // If this is the active branch, update the stored name/address
+        if (editingId === activeBranchId) {
+          setActiveBranch(editingId, form.name.trim(), form.address.trim() || null)
+        }
       } else {
         await apiCreateBranch(payload)
       }
@@ -155,7 +241,7 @@ export function Branches() {
                       onClick={() =>
                         isActiveBranch
                           ? setActiveBranch(null, null)
-                          : setActiveBranch(b.id, b.name)
+                          : setActiveBranch(b.id, b.name, b.address || null)
                       }
                       className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
                         isActiveBranch
@@ -186,11 +272,27 @@ export function Branches() {
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1.5">Address</label>
-            <input className="input-base" placeholder="Full address" value={form.address} onChange={(e) => set('address', e.target.value)} />
+            <AddressAutocomplete
+              value={form.address}
+              onChange={(v) => set('address', v)}
+              placeholder="Search Philippines address…"
+            />
+            <p className="text-xs text-gray-400 mt-1">Start typing to search, or enter manually.</p>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1.5">Branch Manager</label>
-            <input className="input-base" placeholder="Manager name" value={form.manager_name} onChange={(e) => set('manager_name', e.target.value)} />
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">
+              Branch Manager
+              {staffList.length > 0 && (
+                <span className="ml-1.5 text-gray-400 font-normal">
+                  <Search className="w-3 h-3 inline mr-0.5" /> search from {staffList.length} managers
+                </span>
+              )}
+            </label>
+            <ManagerPicker
+              value={form.manager_name}
+              onChange={(v) => set('manager_name', v)}
+              staffList={staffList}
+            />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1.5">POS Terminals</label>

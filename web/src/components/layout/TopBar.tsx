@@ -1,4 +1,4 @@
-import { Menu, Wifi, WifiOff, RefreshCw, Bell, ChevronRight, MapPin } from 'lucide-react'
+import { Menu, Wifi, WifiOff, RefreshCw, ChevronRight, MapPin } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
 import { useState, useEffect, useRef } from 'react'
 import { usePOSStore } from '../../store/posStore'
@@ -187,11 +187,6 @@ export function TopBar({ onToggleSidebar }: TopBarProps) {
             <span className="truncate max-w-[140px]">{branchLabel}</span>
           </div>
         )}
-
-        {/* Notifications (placeholder) */}
-        <button className="relative w-8 h-8 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors flex items-center justify-center">
-          <Bell className="w-4 h-4" />
-        </button>
 
         {/* Profile */}
         {user && <ProfileMenu user={user} />}

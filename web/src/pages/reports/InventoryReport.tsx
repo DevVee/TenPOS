@@ -1,12 +1,14 @@
 ﻿import { useState, useMemo } from 'react'
-import { Download, Loader2, Search, AlertTriangle } from 'lucide-react'
+import { Download, Loader2, Search, AlertTriangle, MapPin } from 'lucide-react'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { downloadXLSX } from '../../lib/xlsxExport'
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
 import { StatCard } from '../../components/ui/StatCard'
 import { Package, TrendingDown, TrendingUp } from 'lucide-react'
-import { apiInventoryReport } from '../../lib/api'
+import { apiInventoryReport, apiGetBranches } from '../../lib/api'
 import { useApiData } from '../../hooks/useApiData'
+import { useAuthStore } from '../../store/authStore'
+import { useBranchStore } from '../../store/branchStore'
 
 function fmt(n: number) { return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2 })}` }
 
@@ -25,8 +27,21 @@ interface InvData {
 }
 
 export function InventoryReport() {
+  const { user } = useAuthStore()
+  const { activeBranchId } = useBranchStore()
+  const isAdmin = user?.role === 'admin'
+  const defaultBranch = isAdmin ? (activeBranchId ?? '') : (user?.branch_id ?? '')
+  const [branchFilter, setBranchFilter] = useState(defaultBranch)
+
+  const { data: branchData } = useApiData<{ id: string; name: string }[]>(
+    () => isAdmin ? apiGetBranches() as Promise<{ id: string; name: string }[]> : Promise.resolve([]),
+    []
+  )
+  const branches = branchData ?? []
+
   const { data, loading } = useApiData<InvData>(
-    () => apiInventoryReport() as unknown as Promise<InvData>
+    () => apiInventoryReport(branchFilter ? { branch_id: branchFilter } : undefined) as unknown as Promise<InvData>,
+    [branchFilter]
   )
 
   const [search,        setSearch]        = useState('')
@@ -151,11 +166,26 @@ export function InventoryReport() {
     <div>
       <PageHeader
         title="Inventory Report"
-        subtitle="Stock movement, turnover, and valuation"
+        subtitle={`Stock movement · ${branchFilter ? (branches.find((b) => b.id === branchFilter)?.name ?? 'Branch') : 'All Branches'}`}
         actions={
-          <button onClick={handleExport} className="btn-secondary flex items-center gap-1.5">
-            <Download className="w-4 h-4" /> Export Excel
-          </button>
+          <div className="flex items-center gap-2">
+            {isAdmin && branches.length > 0 && (
+              <div className="flex items-center gap-1.5 h-9 px-2.5 rounded-lg border border-gray-200 bg-white text-xs text-gray-600">
+                <MapPin className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                <select
+                  value={branchFilter}
+                  onChange={(e) => setBranchFilter(e.target.value)}
+                  className="bg-transparent text-xs text-gray-700 font-medium outline-none cursor-pointer"
+                >
+                  <option value="">All Branches</option>
+                  {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+              </div>
+            )}
+            <button onClick={handleExport} className="btn-secondary flex items-center gap-1.5">
+              <Download className="w-4 h-4" /> Export Excel
+            </button>
+          </div>
         }
       />
 

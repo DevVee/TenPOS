@@ -1,11 +1,13 @@
 import { useState, useMemo } from 'react'
-import { Download, TrendingUp, Loader2, CalendarRange, DollarSign, ShoppingBag } from 'lucide-react'
+import { Download, TrendingUp, Loader2, CalendarRange, DollarSign, ShoppingBag, MapPin } from 'lucide-react'
 import { downloadXLSX } from '../../lib/xlsxExport'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatCard } from '../../components/ui/StatCard'
 import { EmptyState } from '../../components/ui/EmptyState'
-import { apiSalesReport } from '../../lib/api'
+import { apiSalesReport, apiGetBranches } from '../../lib/api'
 import { useApiData } from '../../hooks/useApiData'
+import { useAuthStore } from '../../store/authStore'
+import { useBranchStore } from '../../store/branchStore'
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area,
@@ -65,20 +67,43 @@ const PERIOD_LABELS: Record<Period, string> = {
 }
 
 export function SalesReport() {
+  const { user } = useAuthStore()
+  const { activeBranchId } = useBranchStore()
+
   const [period, setPeriod]         = useState<Period>('week')
   const [customFrom, setCustomFrom] = useState(isoDate(new Date(Date.now() - 7 * 86400000)))
   const [customTo, setCustomTo]     = useState(isoDate(new Date()))
   const [category, setCategory]     = useState('All')
+
+  // Branch filter: admins can pick any branch or "All"; others locked to their own
+  const isAdmin = user?.role === 'admin'
+  const defaultBranch = isAdmin ? (activeBranchId ?? '') : (user?.branch_id ?? '')
+  const [branchFilter, setBranchFilter] = useState(defaultBranch)
+
+  const { data: branchData } = useApiData<{ id: string; name: string }[]>(
+    () => isAdmin ? apiGetBranches() as Promise<{ id: string; name: string }[]> : Promise.resolve([]),
+    []
+  )
+  const branches = branchData ?? []
 
   const queryDates = useMemo(() => {
     if (period === 'custom') return { from: customFrom + 'T00:00:00', to: customTo + 'T23:59:59' }
     return presetDates(period)
   }, [period, customFrom, customTo])
 
+  const queryParams = useMemo(() => ({
+    ...queryDates,
+    ...(branchFilter ? { branch_id: branchFilter } : {}),
+  }), [queryDates, branchFilter])
+
   const { data, loading } = useApiData<SalesData>(
-    () => apiSalesReport(queryDates) as Promise<SalesData>,
-    [queryDates]
+    () => apiSalesReport(queryParams) as Promise<SalesData>,
+    [queryParams]
   )
+
+  const activeBranchLabel = branchFilter
+    ? (branches.find((b) => b.id === branchFilter)?.name ?? user?.branch ?? 'Branch')
+    : 'All Branches'
 
   const summary      = data?.summary
   const totalRevenue = summary ? Number(summary.total_revenue) : 0
@@ -171,9 +196,24 @@ export function SalesReport() {
     <div>
       <PageHeader
         title="Sales Report"
-        subtitle={`${periodLabel(period, customFrom, customTo)} · Revenue analysis`}
+        subtitle={`${periodLabel(period, customFrom, customTo)} · ${activeBranchLabel}`}
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            {/* Branch filter (admins only) */}
+            {isAdmin && branches.length > 0 && (
+              <div className="flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-gray-200 bg-white text-xs text-gray-600">
+                <MapPin className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                <select
+                  value={branchFilter}
+                  onChange={(e) => setBranchFilter(e.target.value)}
+                  className="bg-transparent text-xs text-gray-700 font-medium outline-none cursor-pointer"
+                >
+                  <option value="">All Branches</option>
+                  {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+              </div>
+            )}
+
             {/* Period tabs */}
             <div className="flex items-center bg-gray-100 rounded-lg p-0.5 gap-0.5">
               {(['today', 'week', 'month', 'year', 'custom'] as Period[]).map((t) => (

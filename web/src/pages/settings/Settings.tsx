@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Save, Check, Store, Receipt, Shield, RefreshCw, Clock, Printer, Package, KeyRound, Eye, EyeOff, CheckCircle2, AlertCircle, Loader2, Archive, Download, Calendar } from 'lucide-react'
+import { Save, Check, Store, Receipt, Shield, RefreshCw, Clock, Printer, Package, KeyRound, Eye, EyeOff, CheckCircle2, AlertCircle, Loader2, Archive, Download, Calendar, MapPin } from 'lucide-react'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { Modal } from '../../components/ui/Modal'
 import { useSettingsStore } from '../../store/settingsStore'
 import { useAuthStore } from '../../store/authStore'
+import { useBranchStore } from '../../store/branchStore'
 import { apiGetMyPinStatus, apiSetOverridePin, apiClearOverridePin } from '../../lib/api'
 import {
   runBackup, runSQLBackup, getLastBackup, isAutoBackupEnabled, setAutoBackupEnabled,
@@ -49,6 +50,7 @@ function SectionHeader({ icon: Icon, title }: { icon: React.ElementType; title: 
 export function Settings() {
   const s = useSettingsStore()
   const { user } = useAuthStore()
+  const { activeBranchId, activeBranchName, activeBranchAddress } = useBranchStore()
   const [saved, setSaved] = useState(false)
 
   // ── Backup state ────────────────────────────────────────────────────────────
@@ -156,8 +158,8 @@ export function Settings() {
   }
 
   const [form, setForm] = useState({
-    storeName:             s.storeName,
-    address:               s.address,
+    storeName:             activeBranchName    ?? s.storeName,
+    address:               activeBranchAddress ?? s.address,
     phone:                 s.phone,
     email:                 s.email,
     website:               s.website,
@@ -177,6 +179,21 @@ export function Settings() {
   })
 
   const set = (k: string, v: string | boolean) => setForm((f) => ({ ...f, [k]: v }))
+
+  // When the active branch changes, update the store name/address fields to
+  // reflect that branch's identity so receipts and reports use the right info.
+  useEffect(() => {
+    if (activeBranchId) {
+      setForm((f) => ({
+        ...f,
+        storeName: activeBranchName    ?? f.storeName,
+        address:   activeBranchAddress ?? f.address,
+      }))
+    } else {
+      setForm((f) => ({ ...f, storeName: s.storeName, address: s.address }))
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeBranchId, activeBranchName, activeBranchAddress])
 
   const handleSave = () => {
     s.update({
@@ -223,6 +240,15 @@ export function Settings() {
         {/* ── Row 1: Store Information (full width) ───────────────────── */}
         <div className="card p-5">
           <SectionHeader icon={Store} title="Store Information" />
+          {activeBranchId && (
+            <div className="flex items-center gap-2 mb-4 px-3 py-2.5 bg-brand-pale border border-brand/20 rounded-xl text-sm text-brand">
+              <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
+              <span>
+                Showing <strong>{activeBranchName}</strong> — name and address reflect the active branch.
+                {' '}<a href="/settings/branches" className="underline underline-offset-2 text-brand/70 hover:text-brand text-xs">Change in Branch Settings</a>
+              </span>
+            </div>
+          )}
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div className="sm:col-span-2 lg:col-span-3">
               <label className="block text-xs font-medium text-gray-700 mb-1.5">Business Name</label>

@@ -894,16 +894,17 @@ export async function apiDeleteVoucher(id: string) {
 
 export async function apiSalesReport(params: Record<string, string>) {
   let q = supabase.from('transactions')
-    .select('id, total, payment_method, created_at, transaction_items(product_id, product_name, quantity, subtotal), transaction_payments(method, amount)')
+    .select('id, total, payment_method, created_at, branch_id, transaction_items(product_id, product_name, quantity, subtotal, products(category_id, categories(name))), transaction_payments(method, amount)')
     .eq('status', 'completed')
-  if (params.from) q = q.gte('created_at', params.from)
-  if (params.to)   q = q.lte('created_at', params.to)
+  if (params.from)      q = q.gte('created_at', params.from)
+  if (params.to)        q = q.lte('created_at', params.to)
+  if (params.branch_id) q = q.eq('branch_id', params.branch_id)
   const { data, error } = await q
   if (error) throw new Error(error.message)
 
   const txns = (data ?? []) as {
-    id: string; total: number | string; payment_method: string; created_at: string
-    transaction_items: { product_id: string; product_name: string; quantity: number; subtotal: number | string }[]
+    id: string; total: number | string; payment_method: string; created_at: string; branch_id: string
+    transaction_items: { product_id: string; product_name: string; quantity: number; subtotal: number | string; products?: { categories?: { name: string } | null } | null }[]
     transaction_payments: { method: string; amount: number | string }[]
   }[]
 
@@ -928,18 +929,22 @@ export async function apiSalesReport(params: Record<string, string>) {
   }
   const salesByPeriod = [...dayMap.entries()].map(([date, v]) => ({ date, ...v }))
 
-  // Top products
-  const prodMap = new Map<string, { product_name: string; quantity_sold: number; revenue: number }>()
+  // Top products (with category from joined products.categories)
+  const prodMap = new Map<string, { product_name: string; category_name: string; quantity_sold: number; revenue: number }>()
   for (const t of txns) {
     for (const item of (t.transaction_items ?? [])) {
       if (!prodMap.has(item.product_id)) {
-        prodMap.set(item.product_id, { product_name: item.product_name, quantity_sold: 0, revenue: 0 })
+        prodMap.set(item.product_id, {
+          product_name: item.product_name,
+          category_name: item.products?.categories?.name ?? '',
+          quantity_sold: 0, revenue: 0,
+        })
       }
       prodMap.get(item.product_id)!.quantity_sold += item.quantity
       prodMap.get(item.product_id)!.revenue       += Number(item.subtotal)
     }
   }
-  const topProducts = [...prodMap.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 10)
+  const topProducts = [...prodMap.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 20)
 
   // By payment method — sum amounts across all payment splits
   const methodMap: Record<string, { count: number; total: number }> = {}
@@ -982,10 +987,11 @@ export async function apiSalesReport(params: Record<string, string>) {
 
 export async function apiFinancialReport(params: Record<string, string>) {
   let q = supabase.from('transactions')
-    .select('total, payment_method, transaction_items(product_id, quantity, subtotal, products(cost)), transaction_payments(method, amount)')
+    .select('total, payment_method, branch_id, transaction_items(product_id, quantity, subtotal, products(cost)), transaction_payments(method, amount)')
     .eq('status', 'completed')
-  if (params.from) q = q.gte('created_at', params.from)
-  if (params.to)   q = q.lte('created_at', params.to)
+  if (params.from)      q = q.gte('created_at', params.from)
+  if (params.to)        q = q.lte('created_at', params.to)
+  if (params.branch_id) q = q.eq('branch_id', params.branch_id)
   const { data, error } = await q
   if (error) throw new Error(error.message)
 
@@ -1003,8 +1009,9 @@ export async function apiFinancialReport(params: Record<string, string>) {
   const gross_profit = revenue - cogs
   const gross_margin = revenue > 0 ? (gross_profit / revenue) * 100 : 0
 
-  const { data: stockData } = await supabase
-    .from('stock_levels').select('stock, products(cost)')
+  let stockQ = supabase.from('stock_levels').select('stock, products(cost)')
+  if (params.branch_id) stockQ = stockQ.eq('branch_id', params.branch_id)
+  const { data: stockData } = await stockQ
   const stock_value = (stockData ?? []).reduce((s, row) => {
     const r = row as unknown as { stock: number; products: { cost: number | string } | null }
     return s + (r.stock ?? 0) * Number(r.products?.cost ?? 0)

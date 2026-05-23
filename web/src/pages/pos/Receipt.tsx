@@ -2,6 +2,7 @@ import { useNavigate, useLocation, useParams } from 'react-router-dom'
 import { Printer, ShoppingCart, WifiOff } from 'lucide-react'
 import { useSettingsStore } from '../../store/settingsStore'
 import { useAuthStore } from '../../store/authStore'
+import { useBranchStore } from '../../store/branchStore'
 
 interface ReceiptItem {
   name: string
@@ -35,6 +36,10 @@ export function Receipt() {
   const receipt = (location.state as { transaction?: ReceiptData } | null)?.transaction
   const { storeName, address } = useSettingsStore()
   const { user } = useAuthStore()
+  const { activeBranchName, activeBranchAddress } = useBranchStore()
+
+  const displayName    = activeBranchName    ?? storeName
+  const displayAddress = activeBranchAddress ?? address
 
   const dateObj = receipt?.created_at ? new Date(receipt.created_at) : new Date()
   const date = dateObj.toLocaleDateString('en-PH', {
@@ -78,12 +83,12 @@ export function Receipt() {
         <div className="text-center mb-4 border-b border-dashed border-gray-200 pb-4">
           <img
             src="/brand/logo.png"
-            alt={storeName}
+            alt={displayName}
             className="h-10 object-contain mx-auto mb-2"
             onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
           />
-          <p className="font-bold text-gray-900 text-base">{storeName}</p>
-          {address && <p className="text-xs text-gray-400">{address}</p>}
+          <p className="font-bold text-gray-900 text-base">{displayName}</p>
+          {displayAddress && <p className="text-xs text-gray-400">{displayAddress}</p>}
           <p className="text-xs text-gray-400 mt-1">{date}</p>
         </div>
 
