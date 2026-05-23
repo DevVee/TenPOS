@@ -375,7 +375,8 @@ export async function submitTransaction(
 
   // ── Offline path: queue locally ────────────────────────────────────────────
   const localId    = uuid()
-  const receiptNo  = `OFF-${Date.now().toString(36).toUpperCase()}`
+  // Append 4 chars of the UUID to prevent millisecond collisions across devices
+  const receiptNo  = `OFF-${Date.now().toString(36).toUpperCase()}-${localId.slice(0, 4).toUpperCase()}`
 
   await db.offlineQueue.add({
     localId,

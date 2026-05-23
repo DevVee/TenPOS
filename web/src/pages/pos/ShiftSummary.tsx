@@ -18,8 +18,8 @@ interface Txn {
 }
 
 export function ShiftSummary() {
-  const { user, logout } = useAuthStore()
-  const navigate         = useNavigate()
+  const { user, loginAt, logout } = useAuthStore()
+  const navigate                   = useNavigate()
 
   const today = new Date().toISOString().slice(0, 10)
 
@@ -40,8 +40,11 @@ export function ShiftSummary() {
 
   const first = txns.at(-1)
   const last  = txns.at(0)
-  const shiftMins = (first && last && first.id !== last.id)
-    ? Math.round((new Date(last.created_at).getTime() - new Date(first.created_at).getTime()) / 60000)
+
+  // Use actual login time as shift start; fall back to first transaction if unavailable
+  const shiftStart = loginAt ? new Date(loginAt) : (first ? new Date(first.created_at) : null)
+  const shiftMins  = shiftStart
+    ? Math.round((Date.now() - shiftStart.getTime()) / 60000)
     : 0
   const shiftHours = shiftMins > 0
     ? `${Math.floor(shiftMins / 60)}h ${shiftMins % 60}m`
@@ -104,10 +107,11 @@ export function ShiftSummary() {
               <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Timeline</p>
               <div className="space-y-2">
                 {[
-                  ['First Sale', first ? new Date(first.created_at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }) : '—'],
-                  ['Last Sale',  last  ? new Date(last.created_at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }) : '—'],
-                  ['Duration',   shiftHours],
-                  ['Date',       new Date().toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })],
+                  ['Shift Start', shiftStart ? shiftStart.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }) : '—'],
+                  ['First Sale',  first ? new Date(first.created_at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }) : '—'],
+                  ['Last Sale',   last  ? new Date(last.created_at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }) : '—'],
+                  ['Duration',    shiftHours],
+                  ['Date',        new Date().toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })],
                 ].map(([label, val]) => (
                   <div key={label as string} className="flex justify-between text-sm">
                     <span className="text-gray-500">{label as string}</span>
@@ -126,7 +130,8 @@ export function ShiftSummary() {
             {txns.length === 0 ? (
               <div className="py-8 text-center text-sm text-gray-400">No transactions yet today</div>
             ) : (
-              <table className="w-full">
+              <div className="overflow-x-auto">
+              <table className="w-full min-w-[340px]">
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-400">Receipt #</th>
@@ -152,6 +157,7 @@ export function ShiftSummary() {
                   ))}
                 </tbody>
               </table>
+              </div>
             )}
           </div>
         </>

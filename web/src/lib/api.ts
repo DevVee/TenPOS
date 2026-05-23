@@ -47,7 +47,10 @@ export function getRefreshToken(): string | null {
   } catch { return null }
 }
 
-/** Supabase SDK manages tokens automatically — these are kept for compat. */
+/**
+ * @deprecated Supabase SDK manages tokens automatically.
+ * This function is a no-op kept only for backward compatibility.
+ */
 export function saveTokens(_access: string, _refresh: string) { /* managed by SDK */ }
 
 export function clearTokens() {
@@ -194,20 +197,30 @@ export async function apiUpdateProfile(data: { name?: string; email?: string }) 
   const staff = await getCurrentStaff()
   if (!staff) throw new Error('Not authenticated')
 
+  // Use !== undefined so empty strings are intentional (not accidentally skipped)
   const updates: Record<string, string> = {}
-  if (data.name)  updates.name  = data.name
-  if (data.email) updates.email = data.email
+  if (data.name  !== undefined) {
+    if (!data.name.trim()) throw new Error('Name cannot be empty.')
+    updates.name = data.name.trim()
+  }
 
+  // Only update staff.email once Auth email change is confirmed — not eagerly.
+  // Updating Auth triggers a re-verification email; the staff row is updated
+  // only for non-email fields here to prevent a desync if the user never
+  // confirms the new address.
   if (Object.keys(updates).length > 0) {
     const { error } = await supabase.from('staff').update(updates).eq('id', staff.id)
     if (error) throw new Error('Failed to update profile: ' + error.message)
     _currentStaff = { ..._currentStaff!, ...updates }
   }
 
-  // Update Supabase Auth email if changed
-  if (data.email) {
-    const { error } = await supabase.auth.updateUser({ email: data.email })
-    if (error) throw new Error('Failed to update email: ' + error.message)
+  // Trigger Auth email change (sends confirmation link; staff.email stays unchanged
+  // until the user clicks the link and the onAuthStateChange webhook updates it).
+  if (data.email !== undefined && data.email.trim() !== staff.email) {
+    const { error } = await supabase.auth.updateUser({ email: data.email.trim() })
+    if (error) throw new Error('Failed to request email change: ' + error.message)
+    void addAudit('PROFILE_UPDATE', `Email change requested: ${data.email}`, 'info')
+    return 'email_pending'
   }
 
   void addAudit('PROFILE_UPDATE', `Profile updated: ${Object.keys(updates).join(', ')}`, 'info')
@@ -216,6 +229,9 @@ export async function apiUpdateProfile(data: { name?: string; email?: string }) 
 
 export async function apiChangePassword(newPassword: string) {
   if (newPassword.length < 8) throw new Error('Password must be at least 8 characters.')
+  // Require at least one letter AND one number (basic complexity)
+  if (!/[a-zA-Z]/.test(newPassword)) throw new Error('Password must contain at least one letter.')
+  if (!/[0-9]/.test(newPassword))    throw new Error('Password must contain at least one number.')
   const { error } = await supabase.auth.updateUser({ password: newPassword })
   if (error) throw new Error(error.message)
   void addAudit('PASSWORD_CHANGE', 'User changed their password', 'warning')
@@ -377,6 +393,9 @@ export async function apiGetProductByBarcode(barcode: string) {
 
 export async function apiCreateProduct(data: Record<string, unknown>) {
   const staff = await getCurrentStaff()
+  if (!staff?.branch_id) {
+    throw new Error('Your account has no branch assigned. Contact your administrator.')
+  }
   const { data: product, error } = await supabase
     .from('products')
     .insert({

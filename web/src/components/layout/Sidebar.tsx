@@ -2,7 +2,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, ShoppingCart, Package, BarChart3,
   Users, Settings2, ClipboardList, ArrowLeftRight,
-  Shield, LogOut, ChevronDown, ChevronRight,
+  Shield, LogOut, ChevronDown, ChevronRight, X,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useAuthStore } from '../../store/authStore'
@@ -58,7 +58,15 @@ const NAV: NavItem[] = [
   { label: 'Audit Log',      to: '/audit',        icon: Shield,          roles: ['admin'],                                 section: 'MANAGEMENT' },
 ]
 
-export function Sidebar({ collapsed }: { collapsed: boolean }) {
+export function Sidebar({
+  collapsed,
+  mobileOpen = false,
+  onMobileClose,
+}: {
+  collapsed: boolean
+  mobileOpen?: boolean
+  onMobileClose?: () => void
+}) {
   const { user, logout } = useAuthStore()
   const navigate  = useNavigate()
   const { pathname } = useLocation()
@@ -89,14 +97,27 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
   return (
     <aside
       className={`fixed top-0 left-0 h-screen flex flex-col z-30 transition-all duration-200 shadow-panel
-        ${collapsed ? 'w-[64px]' : 'w-[220px]'}`}
+        ${collapsed ? 'w-[64px]' : 'w-[220px]'}
+        md:translate-x-0
+        ${mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+      `}
       style={{ background: '#111318' }}
     >
       {/* ── Logo ──────────────────────────────────────────────────────────── */}
       <div
-        className={`flex items-center h-14 flex-shrink-0 border-b ${collapsed ? 'justify-center px-0' : 'px-4 gap-3'}`}
+        className={`relative flex items-center h-14 flex-shrink-0 border-b ${collapsed ? 'justify-center px-0' : 'px-4 gap-3'}`}
         style={{ borderColor: 'rgba(255,255,255,0.06)' }}
       >
+        {/* Mobile close button — shown only on small screens */}
+        {onMobileClose && !collapsed && (
+          <button
+            onClick={onMobileClose}
+            className="md:hidden absolute right-3 top-1/2 -translate-y-1/2 w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+            aria-label="Close menu"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
         <div className={`flex-shrink-0 rounded-lg overflow-hidden ${collapsed ? 'w-8 h-8' : 'w-7 h-7'}`}>
           <img
             src="/brand/logo.png"

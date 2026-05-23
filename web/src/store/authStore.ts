@@ -7,6 +7,7 @@ interface AuthState {
   user: User | null
   isAuthenticated: boolean
   isLoading: boolean
+  loginAt: string | null   // ISO timestamp of the current session start
   login: (user: User & { avatar_url?: string }) => void
   logout: () => void
   updateUser: (patch: Partial<User>) => void
@@ -32,18 +33,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   isAuthenticated: false,
   isLoading: true,
+  loginAt: null,
 
   /** Called right after apiLogin — the API response now carries avatar_url from Supabase metadata. */
   login: (userData) => {
     const avatarUrl = userData.avatar_url ?? cachedAvatar(userData.id)
     if (avatarUrl) cacheAvatar(userData.id, avatarUrl)
     const { avatar_url: _, ...user } = userData as typeof userData & { avatar_url?: string }
-    set({ user: { ...user, avatarUrl }, isAuthenticated: true })
+    set({ user: { ...user, avatarUrl }, isAuthenticated: true, loginAt: new Date().toISOString() })
   },
 
   logout: () => {
     clearTokens()
-    set({ user: null, isAuthenticated: false })
+    set({ user: null, isAuthenticated: false, loginAt: null })
   },
 
   /** Patch the in-memory user and keep localStorage in sync for offline fallback. */

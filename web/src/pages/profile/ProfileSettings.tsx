@@ -138,10 +138,19 @@ function ProfileForm() {
         flash(setInfoMsg, { text: 'No changes to save.', ok: true })
         return
       }
-      await apiUpdateProfile(patch)
-      const newInitials = getAvatarInitials(patch.name ?? user?.name ?? '')
-      updateUser({ ...patch, avatarInitials: newInitials })
-      flash(setInfoMsg, { text: 'Profile updated successfully!', ok: true })
+      const result = await apiUpdateProfile(patch)
+      if (patch.name) {
+        const newInitials = getAvatarInitials(patch.name)
+        updateUser({ name: patch.name, avatarInitials: newInitials })
+      }
+      if (result === 'email_pending') {
+        flash(setInfoMsg, {
+          text: 'A confirmation link has been sent to your new email address. Your email will update after you click the link.',
+          ok: true,
+        })
+      } else {
+        flash(setInfoMsg, { text: 'Profile updated successfully!', ok: true })
+      }
     } catch (err) {
       flash(setInfoMsg, {
         text: err instanceof Error ? err.message : 'Failed to update profile.',
@@ -177,9 +186,16 @@ function ProfileForm() {
   const avatarUrl = user?.avatarUrl
   const initials  = user?.avatarInitials ?? '?'
 
-  // Password strength (1-4)
-  const strength = Math.min(4, Math.floor(newPass.length / 3))
+  // Password strength (1-4): length ≥8 + has letter + has number + length ≥12
+  const strengthScore = [
+    newPass.length >= 8,
+    /[a-zA-Z]/.test(newPass),
+    /[0-9]/.test(newPass),
+    newPass.length >= 12,
+  ].filter(Boolean).length
+  const strength = newPass.length > 0 ? Math.max(1, strengthScore) : 0
   const strengthColors = ['bg-red-400', 'bg-orange-400', 'bg-yellow-400', 'bg-emerald-500']
+  const strengthLabels = ['', 'Weak', 'Fair', 'Good', 'Strong']
 
   return (
     <div>
@@ -338,15 +354,20 @@ function ProfileForm() {
                   />
                   {/* Strength bar */}
                   {newPass.length > 0 && (
-                    <div className="flex gap-1 mt-2">
-                      {[1, 2, 3, 4].map((lvl) => (
-                        <div
-                          key={lvl}
-                          className={`h-1.5 flex-1 rounded-full transition-all duration-200 ${
-                            lvl <= strength ? strengthColors[strength - 1] : 'bg-gray-100'
-                          }`}
-                        />
-                      ))}
+                    <div className="mt-2 space-y-1">
+                      <div className="flex gap-1">
+                        {[1, 2, 3, 4].map((lvl) => (
+                          <div
+                            key={lvl}
+                            className={`h-1.5 flex-1 rounded-full transition-all duration-200 ${
+                              lvl <= strength ? strengthColors[strength - 1] : 'bg-gray-100'
+                            }`}
+                          />
+                        ))}
+                      </div>
+                      <p className={`text-[11px] font-medium ${strength >= 3 ? 'text-emerald-600' : strength === 2 ? 'text-yellow-600' : 'text-red-500'}`}>
+                        {strengthLabels[strength]} — must have 8+ chars, one letter & one number
+                      </p>
                     </div>
                   )}
                 </div>

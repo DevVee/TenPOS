@@ -174,41 +174,45 @@ export function TransactionDetail() {
         <div className="px-4 py-3 border-b border-gray-100">
           <p className="text-sm font-semibold text-gray-800">Items Purchased ({tx.items.length})</p>
         </div>
-        <table className="w-full">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-400">Product</th>
-              <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-400">SKU</th>
-              <th className="px-4 py-2.5 text-center text-xs font-medium text-gray-400">Qty</th>
-              <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-400">Price</th>
-              <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-400">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {tx.items.map((item) => (
-              <tr key={item.id} className="table-row">
-                <td className="px-4 py-3 text-sm font-medium text-gray-700">{item.product_name}</td>
-                <td className="px-4 py-3 text-xs text-gray-400 font-mono">{item.sku}</td>
-                <td className="px-4 py-3 text-sm text-gray-600 text-center">{item.quantity}</td>
-                <td className="px-4 py-3 text-sm text-gray-600 text-right">{fmt(Number(item.unit_price))}</td>
-                <td className="px-4 py-3 text-sm font-semibold text-gray-800 text-right">{fmt(Number(item.total))}</td>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[420px]">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-400">Product</th>
+                <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-400 hidden sm:table-cell">SKU</th>
+                <th className="px-4 py-2.5 text-center text-xs font-medium text-gray-400">Qty</th>
+                <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-400">Price</th>
+                <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-400">Total</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {tx.items.map((item) => (
+                <tr key={item.id} className="table-row">
+                  <td className="px-4 py-3 text-sm font-medium text-gray-700">{item.product_name}</td>
+                  <td className="px-4 py-3 text-xs text-gray-400 font-mono hidden sm:table-cell">{item.sku}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600 text-center">{item.quantity}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600 text-right">{fmt(Number(item.unit_price))}</td>
+                  <td className="px-4 py-3 text-sm font-semibold text-gray-800 text-right">{fmt(Number(item.total))}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <button
           onClick={() => window.print()}
-          className="btn-secondary flex items-center gap-1.5 flex-1 justify-center"
+          className="btn-secondary flex items-center gap-1.5 flex-1 justify-center min-w-[120px]"
         >
           <Printer className="w-4 h-4" /> Reprint Receipt
         </button>
         {tx.status === 'completed' && (
           <>
             <button
-              onClick={() => navigate('/returns')}
+              onClick={() => navigate('/returns', {
+                state: { preloadReturn: { id: tx.id, receipt_no: tx.receipt_no } },
+              })}
               className="btn-secondary flex items-center gap-1.5 flex-1 justify-center text-yellow-600 border-yellow-200 hover:bg-yellow-50"
             >
               <RotateCcw className="w-4 h-4" /> Return

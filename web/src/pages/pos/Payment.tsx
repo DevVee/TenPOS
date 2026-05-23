@@ -84,9 +84,10 @@ export function Payment() {
       navigate(`/pos/receipt/${result.id}`, {
         state: {
           transaction: {
-            receiptNo:  result.receipt_no,
-            offline:    result.offline,
-            created_at: new Date().toISOString(),
+            receiptNo:    result.receipt_no,
+            offline:      result.offline,
+            created_at:   new Date().toISOString(),
+            cashierName:  user?.name,
             items: cart.map((i) => ({
               name: i.product.name,
               qty: i.quantity,
@@ -132,7 +133,7 @@ export function Payment() {
 
       <div className="max-w-5xl mx-auto p-4 pb-8">
         {checkoutError && (
-          <div className="flex items-center gap-2.5 bg-red-50 border border-red-200 text-brand text-sm rounded-2xl px-4 py-3 mb-4">
+          <div className="flex items-center gap-2.5 bg-red-50 border border-red-200 text-red-700 text-sm rounded-2xl px-4 py-3 mb-4">
             <AlertCircle className="w-4 h-4 flex-shrink-0" />
             <span>{checkoutError}</span>
           </div>
@@ -218,7 +219,7 @@ export function Payment() {
                     </button>
                   </div>
                   {voucherResult && !voucherResult.valid && (
-                    <div className="flex items-center gap-1.5 mt-2 text-xs text-brand font-medium">
+                    <div className="flex items-center gap-1.5 mt-2 text-xs text-red-700 font-medium">
                       <AlertCircle className="w-3.5 h-3.5" /> {voucherResult.message}
                     </div>
                   )}

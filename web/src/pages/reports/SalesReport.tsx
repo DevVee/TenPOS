@@ -366,7 +366,8 @@ export function SalesReport() {
               </p>
               <span className="text-xs text-gray-400">{topProducts.length} products</span>
             </div>
-            <table className="w-full">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[360px]">
               <thead className="table-head">
                 <tr>
                   <th>#</th>
@@ -418,6 +419,7 @@ export function SalesReport() {
                 )}
               </tbody>
             </table>
+            </div>
           </div>
         </>
       )}

@@ -272,6 +272,63 @@
   .divider {
     @apply border-t border-gray-100;
   }
+
+  /* ── Mobile table scroll ─────────────────────────────────────────────────── */
+  /* Wrap .card > table in .table-scroll for horizontal overflow on mobile */
+  .table-scroll {
+    @apply overflow-x-auto -mx-0;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* ── Mobile-friendly card padding ────────────────────────────────────────── */
+  @media (max-width: 640px) {
+    .card {
+      border-radius: 0.75rem;
+    }
+    .page-title {
+      font-size: 1.25rem;
+    }
+  }
+}
+
+/* ── Print styles ─────────────────────────────────────────────────────────────── */
+/* Formats the receipt for a 80mm thermal printer and hides chrome UI */
+
+@media print {
+  /* Hide navigation, buttons, and offline badges */
+  header, nav, aside, footer,
+  .btn-primary, .btn-secondary, .btn-ghost, .btn-danger,
+  [class*="print:hidden"] { display: none !important; }
+
+  body, html {
+    background: white !important;
+    font-size: 11pt;
+  }
+
+  /* Receipt card — no shadow, no border, full width */
+  .card {
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+  }
+
+  /* Print-friendly monospace text */
+  .font-mono { font-family: 'Courier New', Courier, monospace !important; }
+
+  /* Center the receipt and limit to thermal paper width */
+  .max-w-sm { max-width: 72mm !important; margin: 0 auto !important; }
+
+  /* Dashed lines look better on print */
+  .border-dashed { border-style: dashed !important; }
+
+  /* Remove padding on the outer wrapper */
+  .p-5, .p-6 { padding: 0 !important; }
+
+  /* Page margins */
+  @page {
+    size: 80mm auto;
+    margin: 8mm 4mm;
+  }
 }
 
 /* ── Animations ──────────────────────────────────────────────────────────────── */

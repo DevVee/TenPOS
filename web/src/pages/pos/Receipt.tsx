@@ -1,5 +1,7 @@
 import { useNavigate, useLocation, useParams } from 'react-router-dom'
 import { Printer, ShoppingCart, WifiOff } from 'lucide-react'
+import { useSettingsStore } from '../../store/settingsStore'
+import { useAuthStore } from '../../store/authStore'
 
 interface ReceiptItem {
   name: string
@@ -13,6 +15,7 @@ interface ReceiptData {
   receiptNo: string
   offline: boolean
   created_at?: string
+  cashierName?: string
   items: ReceiptItem[]
   subtotal: number
   voucherDiscount: number
@@ -30,6 +33,8 @@ export function Receipt() {
   const { id } = useParams()
   const location = useLocation()
   const receipt = (location.state as { transaction?: ReceiptData } | null)?.transaction
+  const { storeName, address } = useSettingsStore()
+  const { user } = useAuthStore()
 
   const dateObj = receipt?.created_at ? new Date(receipt.created_at) : new Date()
   const date = dateObj.toLocaleDateString('en-PH', {
@@ -73,13 +78,12 @@ export function Receipt() {
         <div className="text-center mb-4 border-b border-dashed border-gray-200 pb-4">
           <img
             src="/brand/logo.png"
-            alt="TEN Foundation Philippines"
+            alt={storeName}
             className="h-10 object-contain mx-auto mb-2"
             onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
           />
-          <p className="font-bold text-gray-900 text-base">TenPOS</p>
-          <p className="text-xs text-gray-500">Ten Foundation Philippines Inc.</p>
-          <p className="text-xs text-gray-400">Main Branch · Quezon City</p>
+          <p className="font-bold text-gray-900 text-base">{storeName}</p>
+          {address && <p className="text-xs text-gray-400">{address}</p>}
           <p className="text-xs text-gray-400 mt-1">{date}</p>
         </div>
 
@@ -136,6 +140,11 @@ export function Receipt() {
         {/* Footer */}
         <div className="text-center mt-5 pt-4 border-t border-dashed border-gray-200">
           <p className="text-xs text-gray-400">Thank you for your purchase!</p>
+          {(receipt.cashierName ?? user?.name) && (
+            <p className="text-[11px] text-gray-400 mt-1">
+              Served by: {receipt.cashierName ?? user?.name}
+            </p>
+          )}
           <p className="text-[10px] text-gray-300 mt-1">Ref: {id}</p>
         </div>
       </div>

@@ -3,6 +3,7 @@ import type { User } from '../types'
 import { supabase } from '../lib/supabase'
 import { db } from '../lib/db'
 import { clearTokens } from '../lib/api'
+import { stopSyncLoop } from '../lib/sync'
 
 interface AuthState {
   user: User | null
@@ -28,6 +29,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   updateUser: (patch) => set((s) => ({ user: s.user ? { ...s.user, ...patch } : s.user })),
 
   logout: () => {
+    stopSyncLoop()   // M-9: stop background sync before clearing session
     clearTokens()
     set({ user: null, isAuthenticated: false, pinLocked: false })
   },

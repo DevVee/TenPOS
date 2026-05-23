@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { Search, RotateCcw, XCircle, Loader2, AlertCircle } from 'lucide-react'
 import { Badge } from '../../components/ui/Badge'
 import { PageHeader } from '../../components/ui/PageHeader'
@@ -20,6 +21,7 @@ interface TxnDetail extends Txn { items: TxnItem[] }
 export function Returns() {
   const { user }                        = useAuthStore()
   const isManagerOrAdmin                = user?.role === 'admin' || user?.role === 'manager'
+  const location                        = useLocation()
 
   const [search,      setSearch]      = useState('')
   const [voidModal,   setVoidModal]   = useState(false)
@@ -74,6 +76,24 @@ export function Returns() {
       )
       .subscribe()
     return () => { void supabase.removeChannel(channel) }
+  }, [])
+
+  // ── Pre-load return when navigated from TransactionDetail ─────────────────────
+  useEffect(() => {
+    const pre = (location.state as { preloadReturn?: { id: string; receipt_no: string } } | null)
+      ?.preloadReturn
+    if (!pre) return
+    // Open the return modal immediately with the receipt pre-filled
+    setRetReceipt(pre.receipt_no)
+    setReturnModal(true)
+    // Fetch full transaction detail in the background
+    setRetSearching(true)
+    setRetError('')
+    apiGetTransaction(pre.id)
+      .then((detail) => { setRetTxn(detail as TxnDetail) })
+      .catch((err) => { setRetError(err instanceof Error ? err.message : 'Failed to load transaction') })
+      .finally(() => setRetSearching(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const filtered = entries.filter((r) => {
@@ -220,7 +240,8 @@ export function Returns() {
             <Loader2 className="w-6 h-6 animate-spin text-brand" />
           </div>
         ) : (
-          <table className="w-full">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[360px]">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Receipt #</th>
@@ -252,6 +273,7 @@ export function Returns() {
               )}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 
