@@ -259,7 +259,7 @@ export async function runBackup(): Promise<BackupMeta> {
         ],
         rows: staff.map((u) => [
           u.id, u.name, u.email, u.role,
-          u.branch ?? 'Main Branch',
+          u.branch ?? 'Unknown Branch',
           u.status,
           new Date(u.created_at).toLocaleDateString('en-PH'),
         ]),

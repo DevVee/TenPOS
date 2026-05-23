@@ -64,7 +64,7 @@ export const useAuthStore = create<AuthState>((set) => ({
             email:          cachedStaff.email,
             role:           cachedStaff.role as User['role'],
             avatarInitials: initials,
-            branch:         'Main Branch',
+            branch:         cachedStaff.branch_name ?? 'Unknown Branch',
             branch_id:      cachedStaff.branch_id,
           },
           isAuthenticated: true,
@@ -82,7 +82,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
       const { data: staff, error: staffErr } = await supabase
         .from('staff')
-        .select('id, name, email, role, branch_id, status, sales_count')
+        .select('id, name, email, role, branch_id, status, sales_count, branches(name)')
         .eq('auth_id', session.user.id)
         .single()
 
@@ -92,6 +92,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       }
 
       const s = staff as Record<string, unknown>
+      const branchName = ((s.branches as { name: string } | null)?.name) ?? undefined
 
       // Warm the Dexie cache
       await db.staff.put({
@@ -101,6 +102,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         email:       (s.email as string | null) ?? (session.user.email ?? ''),
         role:        s.role as string,
         branch_id:   s.branch_id as string | null,
+        branch_name: branchName,
         status:      s.status as string,
         sales_count: Number(s.sales_count ?? 0),
         cached_at:   Date.now(),
@@ -120,7 +122,7 @@ export const useAuthStore = create<AuthState>((set) => ({
           email:          (s.email as string | null) ?? (session.user.email ?? ''),
           role:           s.role as User['role'],
           avatarInitials: initials,
-          branch:         'Main Branch',
+          branch:         branchName ?? 'Unknown Branch',
           branch_id:      s.branch_id as string | null,
         },
         isAuthenticated: true,

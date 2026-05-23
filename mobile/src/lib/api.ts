@@ -73,13 +73,15 @@ export async function apiLogin(usernameOrEmail: string, password: string) {
 
   const { data: staff, error: staffErr } = await supabase
     .from('staff')
-    .select('id, name, email, role, branch_id, status, sales_count')
+    .select('id, name, email, role, branch_id, status, sales_count, branches(name)')
     .eq('auth_id', data.user.id)
     .single()
 
   if (staffErr || !staff) throw new Error('Staff account not found. Contact your administrator.')
   const staffRow = staff as Record<string, unknown>
   if (staffRow.status === 'inactive') throw new Error('Your account has been deactivated.')
+
+  const branchName = ((staffRow.branches as { name: string } | null)?.name) ?? undefined
 
   // Cache staff in Dexie for offline use
   await db.staff.put({
@@ -89,6 +91,7 @@ export async function apiLogin(usernameOrEmail: string, password: string) {
     email:       (staffRow.email as string | null) ?? email,
     role:        staffRow.role as string,
     branch_id:   staffRow.branch_id as string | null,
+    branch_name: branchName,
     status:      staffRow.status as string,
     sales_count: Number(staffRow.sales_count ?? 0),
     cached_at:   Date.now(),
@@ -100,11 +103,12 @@ export async function apiLogin(usernameOrEmail: string, password: string) {
     accessToken:  data.session.access_token,
     refreshToken: data.session.refresh_token,
     user: {
-      id:        staffRow.id as string,
-      name:      staffRow.name as string,
-      email:     (staffRow.email as string | null) ?? email,
-      role:      staffRow.role as 'admin' | 'manager' | 'cashier' | 'viewer',
-      branch_id: staffRow.branch_id as string | null,
+      id:          staffRow.id as string,
+      name:        staffRow.name as string,
+      email:       (staffRow.email as string | null) ?? email,
+      role:        staffRow.role as 'admin' | 'manager' | 'cashier' | 'viewer',
+      branch_id:   staffRow.branch_id as string | null,
+      branch_name: branchName ?? null,
     },
   }
 }
@@ -125,12 +129,13 @@ export async function apiMe() {
 
         const { data: staff, error: staffErr } = await supabase
           .from('staff')
-          .select('id, name, email, role, branch_id, status, sales_count')
+          .select('id, name, email, role, branch_id, status, sales_count, branches(name)')
           .eq('auth_id', user.id)
           .single()
 
         if (staffErr || !staff) throw new Error('Not authenticated')
         const s = staff as Record<string, unknown>
+        const bn = ((s.branches as { name: string } | null)?.name) ?? undefined
 
         // Update Dexie cache
         await db.staff.put({
@@ -140,17 +145,19 @@ export async function apiMe() {
           email:       (s.email as string | null) ?? '',
           role:        s.role as string,
           branch_id:   s.branch_id as string | null,
+          branch_name: bn,
           status:      s.status as string,
           sales_count: Number(s.sales_count ?? 0),
           cached_at:   Date.now(),
         })
 
         return {
-          id:        s.id as string,
-          name:      s.name as string,
-          email:     (s.email as string | null) ?? (user.email ?? ''),
-          role:      s.role as string,
-          branch_id: s.branch_id as string | null,
+          id:          s.id as string,
+          name:        s.name as string,
+          email:       (s.email as string | null) ?? (user.email ?? ''),
+          role:        s.role as string,
+          branch_id:   s.branch_id as string | null,
+          branch_name: bn ?? null,
         }
       } catch { /* fall through to Dexie */ }
     }
@@ -159,11 +166,12 @@ export async function apiMe() {
     const cached = await db.staff.where('auth_id').equals(session.user.id).first()
     if (cached) {
       return {
-        id:        cached.id,
-        name:      cached.name,
-        email:     cached.email,
-        role:      cached.role,
-        branch_id: cached.branch_id,
+        id:          cached.id,
+        name:        cached.name,
+        email:       cached.email,
+        role:        cached.role,
+        branch_id:   cached.branch_id,
+        branch_name: cached.branch_name ?? null,
       }
     }
   }
@@ -465,6 +473,13 @@ export async function apiGetInventory(branchId?: string) {
   const products   = await db.products.bulkGet(productIds)
   const prodMap    = new Map(products.filter(Boolean).map((p) => [p!.id, p!]))
 
+  // Build branch_id → branch_name lookup from the staff cache (staff have branch_name populated on login)
+  const allStaff = await db.staff.toArray()
+  const branchNameMap = new Map<string, string>()
+  for (const s of allStaff) {
+    if (s.branch_id && s.branch_name) branchNameMap.set(s.branch_id, s.branch_name)
+  }
+
   return inv.map((i) => {
     const prod = prodMap.get(i.product_id)
     return {
@@ -477,7 +492,7 @@ export async function apiGetInventory(branchId?: string) {
       price:         prod?.price ?? 0,
       cost:          prod?.cost  ?? 0,
       branch_id:     i.branch_id,
-      branch_name:   'Main Branch',
+      branch_name:   branchNameMap.get(i.branch_id) ?? 'Unknown Branch',
       stock:         i.stock,
       reorder_point: i.reorder_point,
       active:        prod?.active ?? true,
@@ -542,7 +557,7 @@ export async function apiGetTransaction(id: string) {
   if (navigator.onLine) {
     const { data, error } = await supabase
       .from('transactions')
-      .select('*, staff(name), transaction_items(*), transaction_payments(*)')
+      .select('*, staff(name), transaction_items(*), transaction_payments(*), branches(name)')
       .eq('id', id).single()
     if (error) throw new Error('Transaction not found')
     const t = data as Record<string, unknown>
@@ -550,7 +565,7 @@ export async function apiGetTransaction(id: string) {
       id: t.id as string,
       receipt_no: t.receipt_no as string,
       branch_id: t.branch_id as string,
-      branch_name: 'Main Branch',
+      branch_name: ((t.branches as { name: string } | null)?.name) ?? 'Unknown Branch',
       staff_id: t.staff_id as string ?? '',
       staff_name: ((t.staff as { name: string } | null)?.name) ?? 'Staff',
       items: ((t.transaction_items as Record<string, unknown>[]) ?? []).map((i) => ({
@@ -957,11 +972,13 @@ export async function apiGetStaff(params?: Record<string, string>) {
   // Fall back to Supabase if cache empty
   if (staffList.length === 0 && navigator.onLine) {
     const { data } = await supabase
-      .from('staff').select('id, auth_id, name, email, role, branch_id, status, sales_count').order('name')
+      .from('staff').select('id, auth_id, name, email, role, branch_id, status, sales_count, branches(name)').order('name')
     staffList = ((data ?? []) as Record<string, unknown>[]).map((s) => ({
       id: s.id as string, auth_id: s.auth_id as string, name: s.name as string,
       email: (s.email as string | null) ?? '', role: s.role as string,
-      branch_id: s.branch_id as string | null, status: s.status as string,
+      branch_id: s.branch_id as string | null,
+      branch_name: ((s.branches as { name: string } | null)?.name) ?? undefined,
+      status: s.status as string,
       sales_count: Number(s.sales_count ?? 0), cached_at: Date.now(),
     }))
   }
@@ -977,7 +994,7 @@ export async function apiGetStaff(params?: Record<string, string>) {
   const limit = parseInt(params?.limit ?? '50', 10)
   const data  = staffList.slice(0, limit).map((s) => ({
     id: s.id, name: s.name, email: s.email, role: s.role,
-    branch: 'Main Branch', branch_id: s.branch_id,
+    branch: s.branch_name ?? 'Unknown Branch', branch_id: s.branch_id,
     // cached_at is the last time this row was pulled from Supabase
     status: s.status, lastLogin: new Date(s.cached_at).toISOString(), salesCount: s.sales_count,
     created_at: '',
@@ -994,7 +1011,7 @@ export async function apiGetStaffMember(id: string) {
       const row = data as Record<string, unknown>
       return {
         id: row.id as string, name: row.name as string, email: row.email as string ?? '',
-        role: row.role as string, branch: 'Main Branch', branch_id: row.branch_id as string | null,
+        role: row.role as string, branch: 'Unknown Branch', branch_id: row.branch_id as string | null,
         status: row.status as string, lastLogin: '', salesCount: Number(row.sales_count ?? 0),
         created_at: '', recent_transactions: [], total_revenue: 0,
       }
@@ -1004,7 +1021,7 @@ export async function apiGetStaffMember(id: string) {
   const txns = (await db.transactions.toArray()).filter((t) => t.staff_id === id && t.status === 'completed')
   return {
     id: s.id, name: s.name, email: s.email, role: s.role,
-    branch: 'Main Branch', branch_id: s.branch_id,
+    branch: s.branch_name ?? 'Unknown Branch', branch_id: s.branch_id,
     status: s.status, lastLogin: '', salesCount: s.sales_count,
     created_at: '', recent_transactions: txns.slice(0, 5),
     total_revenue: txns.reduce((sum, t) => sum + t.total, 0),
@@ -1048,7 +1065,7 @@ export async function apiCreateStaff(data: Record<string, unknown>) {
     status: 'active', sales_count: 0, cached_at: Date.now(),
   }
   await db.staff.put(cached)
-  return { id: cached.id, name: cached.name, email: cached.email, role: cached.role, branch: 'Main Branch', status: 'active' }
+  return { id: cached.id, name: cached.name, email: cached.email, role: cached.role, branch: cached.branch_name ?? 'Unknown Branch', status: 'active' }
 }
 
 export async function apiUpdateStaff(id: string, data: Record<string, unknown>) {
@@ -1060,7 +1077,7 @@ export async function apiUpdateStaff(id: string, data: Record<string, unknown>) 
   if (error) throw new Error(error.message)
   await db.staff.update(id, col as Partial<import('./db').CachedStaff>)
   const s = await db.staff.get(id)
-  return { id, name: s?.name ?? '', email: s?.email ?? '', role: s?.role ?? '', branch: 'Main Branch', status: s?.status ?? 'active' }
+  return { id, name: s?.name ?? '', email: s?.email ?? '', role: s?.role ?? '', branch: s?.branch_name ?? 'Unknown Branch', status: s?.status ?? 'active' }
 }
 
 export async function apiDeleteStaff(id: string) {
@@ -1083,7 +1100,7 @@ export async function apiGetBranches() {
       active: Boolean(b.active), terminalCount: Number(b.terminal_count ?? 0),
     }))
   }
-  return [{ id: 'br-1', name: 'Main Branch', address: '', managerName: '', active: true, terminalCount: 1 }]
+  return []  // offline — no cached branch list available
 }
 
 export async function apiCreateBranch(data: Record<string, unknown>) {

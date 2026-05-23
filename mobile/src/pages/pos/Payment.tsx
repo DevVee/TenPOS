@@ -82,6 +82,7 @@ export function Payment() {
           transaction: {
             receiptNo: result.receipt_no,
             offline: result.offline,
+            branchName: user?.branch,
             items: cart.map((i) => ({
               name: i.product.name,
               qty: i.quantity,

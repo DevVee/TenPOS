@@ -207,7 +207,7 @@ export async function refreshStaffCache(): Promise<CachedStaff[]> {
   try {
     const { data, error } = await supabase
       .from('staff')
-      .select('id, auth_id, name, email, role, branch_id, status, sales_count')
+      .select('id, auth_id, name, email, role, branch_id, status, sales_count, branches(name)')
       .eq('status', 'active')
     if (error) throw error
 
@@ -218,6 +218,7 @@ export async function refreshStaffCache(): Promise<CachedStaff[]> {
       email:       (s.email as string | null) ?? '',
       role:        s.role as string,
       branch_id:   (s.branch_id as string | null),
+      branch_name: ((s.branches as { name: string } | null)?.name) ?? undefined,
       status:      s.status as string,
       sales_count: Number(s.sales_count ?? 0),
       cached_at:   Date.now(),
@@ -237,7 +238,7 @@ export async function refreshTransactionCache(limitDays = 30): Promise<void> {
     const since = new Date(Date.now() - limitDays * 86400000).toISOString()
     const { data, error } = await supabase
       .from('transactions')
-      .select('id, receipt_no, branch_id, staff_id, subtotal, discount, tax, total, amount_tendered, change_given, payment_method, status, void_reason, voided_at, created_at, staff(name), transaction_items(id, product_id, product_name, sku, variant_id, unit_price, quantity, discount, subtotal, note), transaction_payments(method, amount, reference)')
+      .select('id, receipt_no, branch_id, staff_id, subtotal, discount, tax, total, amount_tendered, change_given, payment_method, status, void_reason, voided_at, created_at, staff(name), transaction_items(id, product_id, product_name, sku, variant_id, unit_price, quantity, discount, subtotal, note), transaction_payments(method, amount, reference), branches(name)')
       .gte('created_at', since)
       .order('created_at', { ascending: false })
       .limit(500)
@@ -267,7 +268,7 @@ export async function refreshTransactionCache(limitDays = 30): Promise<void> {
         id:             t.id as string,
         receipt_no:     t.receipt_no as string,
         branch_id:      t.branch_id as string,
-        branch_name:    'Main Branch',
+        branch_name:    ((t.branches as { name: string } | null)?.name) ?? 'Unknown Branch',
         staff_id:       (t.staff_id as string | null) ?? '',
         staff_name:     ((t.staff as { name: string } | null)?.name) ?? 'Staff',
         items,
@@ -437,7 +438,7 @@ async function _saveLocalTransaction(
     id,
     receipt_no,
     branch_id:      payload.branch_id,
-    branch_name:    'Main Branch',
+    branch_name:    staffRow?.branch_name ?? 'Unknown Branch',
     staff_id:       staffRow?.id ?? '',
     staff_name:     staffRow?.name ?? 'Cashier',
     items: payload.items.map((item, idx) => {

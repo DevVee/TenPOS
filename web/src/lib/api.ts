@@ -124,7 +124,7 @@ export async function apiLogin(usernameOrEmail: string, password: string) {
 
   const { data: staff, error: staffErr } = await supabase
     .from('staff')
-    .select('id, name, email, role, branch_id, status, sales_count')
+    .select('id, name, email, role, branch_id, status, sales_count, branches(name)')
     .eq('auth_id', data.user.id)
     .single()
 
@@ -140,12 +140,13 @@ export async function apiLogin(usernameOrEmail: string, password: string) {
     accessToken: data.session.access_token,
     refreshToken: data.session.refresh_token,
     user: {
-      id:         (staff as StaffRow).id,
-      name:       (staff as StaffRow).name,
-      email:      (staff as StaffRow).email ?? email,
-      role:       (staff as StaffRow).role as 'admin' | 'manager' | 'cashier' | 'viewer',
-      branch_id:  (staff as StaffRow).branch_id,
-      avatar_url: (data.user.user_metadata?.avatar_url as string | undefined) ?? undefined,
+      id:          (staff as StaffRow).id,
+      name:        (staff as StaffRow).name,
+      email:       (staff as StaffRow).email ?? email,
+      role:        (staff as StaffRow).role as 'admin' | 'manager' | 'cashier' | 'viewer',
+      branch_id:   (staff as StaffRow).branch_id,
+      branch_name: ((staff as unknown as { branches: { name: string } | null }).branches)?.name ?? null,
+      avatar_url:  (data.user.user_metadata?.avatar_url as string | undefined) ?? undefined,
     },
   }
 }
@@ -161,7 +162,7 @@ export async function apiMe() {
 
   const { data: staff, error: staffErr } = await supabase
     .from('staff')
-    .select('id, name, email, role, branch_id, status, sales_count')
+    .select('id, name, email, role, branch_id, status, sales_count, branches(name)')
     .eq('auth_id', user.id)
     .single()
 
@@ -169,12 +170,13 @@ export async function apiMe() {
   _currentStaff = staff as StaffRow
 
   return {
-    id:         (staff as StaffRow).id,
-    name:       (staff as StaffRow).name,
-    email:      ((staff as StaffRow).email ?? user.email ?? '') as string,
-    role:       (staff as StaffRow).role,
-    branch_id:  (staff as StaffRow).branch_id,
-    avatar_url: (user.user_metadata?.avatar_url as string | undefined) ?? undefined,
+    id:          (staff as StaffRow).id,
+    name:        (staff as StaffRow).name,
+    email:       ((staff as StaffRow).email ?? user.email ?? '') as string,
+    role:        (staff as StaffRow).role,
+    branch_id:   (staff as StaffRow).branch_id,
+    branch_name: ((staff as unknown as { branches: { name: string } | null }).branches)?.name ?? null,
+    avatar_url:  (user.user_metadata?.avatar_url as string | undefined) ?? undefined,
   }
 }
 
@@ -545,6 +547,7 @@ interface SupabaseStockLevel {
   id: string; product_id: string; branch_id: string; variant_id: string | null
   stock: number; reorder_point: number
   products: { name: string; sku: string; price: number | string; cost: number | string; categories: { name: string } | null } | null
+  branches: { name: string } | null
 }
 
 function mapStockLevel(s: SupabaseStockLevel) {
@@ -555,13 +558,13 @@ function mapStockLevel(s: SupabaseStockLevel) {
     category_name: s.products?.categories?.name ?? '',
     price: Number(s.products?.price ?? 0),
     cost:  Number(s.products?.cost  ?? 0),
-    branch_id: s.branch_id, branch_name: 'Main Branch',
+    branch_id: s.branch_id, branch_name: s.branches?.name ?? 'Unknown Branch',
     stock: s.stock, reorder_point: s.reorder_point,
     active: true,
   }
 }
 
-const STOCK_SELECT = '*, products(name, sku, price, cost, categories(name))'
+const STOCK_SELECT = '*, products(name, sku, price, cost, categories(name)), branches(name)'
 
 export async function apiGetInventory(branchId?: string) {
   let q = supabase.from('stock_levels').select(STOCK_SELECT)
@@ -599,12 +602,13 @@ interface SupabaseTx {
   staff: { name: string } | null
   transaction_items: SupabaseTxItem[]
   transaction_payments: SupabaseTxPayment[]
+  branches: { name: string } | null
 }
 
 function mapTx(t: SupabaseTx) {
   return {
     id: t.id, receipt_no: t.receipt_no,
-    branch_id: t.branch_id, branch_name: 'Main Branch',
+    branch_id: t.branch_id, branch_name: t.branches?.name ?? 'Unknown Branch',
     staff_id: t.staff_id ?? '', staff_name: t.staff?.name ?? 'Staff',
     items: (t.transaction_items ?? []).map((i) => ({
       id: i.id, product_id: i.product_id ?? '',
@@ -630,7 +634,7 @@ function mapTx(t: SupabaseTx) {
   }
 }
 
-const TX_SELECT = '*, staff(name), transaction_items(*), transaction_payments(*)'
+const TX_SELECT = '*, staff(name), transaction_items(*), transaction_payments(*), branches(name)'
 
 export async function apiCreateTransaction(payload: {
   branch_id: string
@@ -1114,9 +1118,10 @@ interface SupabaseStaff {
   id: string; name: string; email: string | null; role: string
   branch_id: string | null; status: string; sales_count: number
   last_login: string | null; created_at: string
+  branches?: { name: string } | null
 }
 
-function mapStaff(u: SupabaseStaff, branchName = 'Main Branch') {
+function mapStaff(u: SupabaseStaff, branchName = 'Unknown Branch') {
   return {
     id: u.id, name: u.name, email: u.email ?? '', role: u.role,
     branch: branchName, branch_id: u.branch_id,
@@ -1127,7 +1132,7 @@ function mapStaff(u: SupabaseStaff, branchName = 'Main Branch') {
 }
 
 export async function apiGetStaff(params?: Record<string, string>) {
-  let q = supabase.from('staff').select('*', { count: 'exact' })
+  let q = supabase.from('staff').select('*, branches(name)', { count: 'exact' })
   if (params?.role)   q = q.eq('role', params.role)
   if (params?.status) q = q.eq('status', params.status)
   if (params?.q) {
@@ -1138,11 +1143,14 @@ export async function apiGetStaff(params?: Record<string, string>) {
   q = q.order('name').limit(limit)
   const { data, error, count } = await q
   if (error) throw new Error(error.message)
-  return { data: (data as SupabaseStaff[]).map((u) => mapStaff(u)), total: count ?? 0 }
+  return {
+    data: (data as SupabaseStaff[]).map((u) => mapStaff(u, u.branches?.name ?? 'Unknown Branch')),
+    total: count ?? 0,
+  }
 }
 
 export async function apiGetStaffMember(id: string) {
-  const { data: u, error } = await supabase.from('staff').select('*').eq('id', id).single()
+  const { data: u, error } = await supabase.from('staff').select('*, branches(name)').eq('id', id).single()
   if (error || !u) throw new Error('Staff member not found')
 
   const { data: txns } = await supabase
@@ -1154,7 +1162,7 @@ export async function apiGetStaffMember(id: string) {
 
   const staff = u as SupabaseStaff
   return {
-    ...mapStaff(staff),
+    ...mapStaff(staff, staff.branches?.name ?? 'Unknown Branch'),
     recent_transactions: txns ?? [],
     total_revenue: totalRevenue,
   }

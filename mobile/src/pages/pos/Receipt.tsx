@@ -14,6 +14,7 @@ interface ReceiptItem {
 interface ReceiptData {
   receiptNo: string
   offline: boolean
+  branchName?: string
   items: ReceiptItem[]
   subtotal: number
   voucherDiscount: number
@@ -61,6 +62,7 @@ export function Receipt() {
         setReceipt({
           receiptNo:      txn.receipt_no,
           offline:        txn.is_offline,
+          branchName:     txn.branch_name,
           items:          txn.items.map((i) => ({
             name:     i.product_name,
             qty:      i.quantity,
@@ -149,7 +151,9 @@ export function Receipt() {
           />
           <p className="font-bold text-gray-900 text-base">TenPOS</p>
           <p className="text-xs text-gray-500">Ten Foundation Philippines Inc.</p>
-          <p className="text-xs text-gray-400">Main Branch · Quezon City</p>
+          {receipt.branchName && (
+            <p className="text-xs text-gray-400">{receipt.branchName}</p>
+          )}
           <p className="text-xs text-gray-400 mt-1">{date}</p>
         </div>
 

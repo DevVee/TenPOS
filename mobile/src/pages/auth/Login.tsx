@@ -38,7 +38,7 @@ export function Login() {
       const data = await apiLogin(username, password)
       const me = data.user
       const initials = me.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
-      login({ id: me.id, name: me.name, email: me.email, role: me.role as UserRole, avatarInitials: initials, branch: 'Main Branch', branch_id: me.branch_id })
+      login({ id: me.id, name: me.name, email: me.email, role: me.role as UserRole, avatarInitials: initials, branch: me.branch_name ?? 'Unknown Branch', branch_id: me.branch_id })
       navigate(me.role === 'cashier' ? '/pos' : '/dashboard')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Incorrect username or password.')

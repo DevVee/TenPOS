@@ -103,7 +103,7 @@ export function POSTerminal() {
           <div className="w-px h-5 bg-gray-200" />
           <div>
             <p className="text-sm font-semibold text-gray-800 leading-none">POS Terminal</p>
-            <p className="text-xs text-gray-400 leading-none mt-0.5">{user?.branch ?? 'Main Branch'}</p>
+            <p className="text-xs text-gray-400 leading-none mt-0.5">{user?.branch ?? 'Unknown Branch'}</p>
           </div>
         </div>
 

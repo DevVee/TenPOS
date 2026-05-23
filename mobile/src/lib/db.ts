@@ -82,6 +82,7 @@ export interface CachedStaff {
   email: string
   role: string
   branch_id: string | null
+  branch_name?: string   // populated when online; absent in legacy cache rows
   status: string
   sales_count: number
   cached_at: number

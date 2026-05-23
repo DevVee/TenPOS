@@ -72,7 +72,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           email:          me.email,
           role:           me.role as User['role'],
           avatarInitials: initials,
-          branch:         'Main Branch',
+          branch:         me.branch_name ?? 'Unknown Branch',
           branch_id:      me.branch_id,
           avatarUrl,
         },
