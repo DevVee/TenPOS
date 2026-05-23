@@ -143,7 +143,14 @@ function BoundedRoutes() {
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { isAuthenticated, isLoading, pinLocked } = useAuthStore()
-  if (isLoading) return <div className="min-h-screen bg-white" />
+  if (isLoading) return (
+    <div className="min-h-screen bg-white flex items-center justify-center">
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-8 h-8 border-[3px] border-red-500 border-t-transparent rounded-full animate-spin" />
+        <span className="text-xs text-gray-400 font-medium">Loading…</span>
+      </div>
+    </div>
+  )
   if (!isAuthenticated) return <Navigate to="/login" replace />
   // PIN lock check — prevent direct URL access to protected pages while locked
   if (pinLocked) return <Navigate to="/pin" replace />

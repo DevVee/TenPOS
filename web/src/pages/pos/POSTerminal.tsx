@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, type ElementType } from 'react'
 import {
   Search, Plus, Minus, Trash2, X, Tag,
   ChevronRight, Wifi, ArrowLeft, LogOut,
-  Package, ShoppingBag, Loader2, ShoppingCart, Info,
+  Package, ShoppingBag, Loader2, ShoppingCart, Info, AlertCircle,
 } from 'lucide-react'
 import { usePOSStore } from '../../store/posStore'
 import { useAuthStore } from '../../store/authStore'
@@ -33,6 +33,7 @@ export function POSTerminal() {
   const [discountInput, setDiscountInput]   = useState<Record<string, string>>({})
   const [products, setProducts]             = useState<Product[]>([])
   const [loading, setLoading]               = useState(true)
+  const [loadError, setLoadError]           = useState('')
   const [mobileCartOpen, setMobileCartOpen] = useState(false)
   const [infoProduct, setInfoProduct]       = useState<Product | null>(null)
 
@@ -42,6 +43,7 @@ export function POSTerminal() {
       try {
         const { data } = await apiGetProducts({ limit: '500', active: 'true' })
         if (!alive) return
+        setLoadError('')
         setProducts(
           data.filter((p) => p.active).map((p) => ({
             id: p.id, name: p.name, sku: p.sku,
@@ -57,8 +59,11 @@ export function POSTerminal() {
             widthCm: p.width_cm, heightCm: p.height_cm, tags: p.tags, notes: p.notes,
           }))
         )
-      } catch { /* keep existing */ }
-      finally { if (alive) setLoading(false) }
+      } catch (err) {
+        // On subsequent calls (realtime refresh), keep existing products and stay quiet.
+        // On the very first load (products still empty), surface the error so the cashier knows.
+        if (alive) setLoadError((prev) => prev || (err instanceof Error ? err.message : 'Failed to load products'))
+      } finally { if (alive) setLoading(false) }
     }
     reload()
     const u1 = subscribeProducts(reload)
@@ -212,6 +217,15 @@ export function POSTerminal() {
               <div className="flex flex-col items-center justify-center h-48 gap-2 text-gray-400">
                 <Loader2 className="w-6 h-6 animate-spin" />
                 <p className="text-sm">Loading products…</p>
+              </div>
+            ) : loadError && products.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-48 gap-3">
+                <div className="w-10 h-10 rounded-xl bg-red-50 flex items-center justify-center">
+                  <AlertCircle className="w-5 h-5 text-red-400" />
+                </div>
+                <p className="text-sm font-medium text-red-600">Failed to load products</p>
+                <p className="text-xs text-gray-400 text-center max-w-[200px]">{loadError}</p>
+                <button onClick={() => window.location.reload()} className="text-xs text-brand hover:underline">Retry</button>
               </div>
             ) : filtered.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-48 gap-2">

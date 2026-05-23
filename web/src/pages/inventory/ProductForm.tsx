@@ -194,7 +194,9 @@ export function ProductForm() {
             label: v.label, value: v.value, priceAdj: String(v.price_adjustment),
           })))
         }
-      } catch { /* ignore */ }
+      } catch (err) {
+        setSaveError(err instanceof Error ? err.message : 'Failed to load product data')
+      }
       setLoadingData(false)
     }
     load()

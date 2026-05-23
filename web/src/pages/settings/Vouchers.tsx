@@ -65,7 +65,7 @@ export function Vouchers() {
   }
 
   const handleSave = async () => {
-    if (!form.code.trim() || !form.value || !form.expiry) return
+    if (!form.code.trim() || !form.value) return   // expiry is intentionally optional (never-expiring vouchers)
     setSaving(true)
     setSaveError('')
     const payload = {
@@ -96,7 +96,9 @@ export function Vouchers() {
     try {
       await apiUpdateVoucherById(v.id, { active: !v.active })
       setTick((t) => t + 1)
-    } catch {}
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to update voucher')
+    }
   }
 
   const handleDelete = async () => {
@@ -105,7 +107,10 @@ export function Vouchers() {
       await apiDeleteVoucher(deleteId)
       setDeleteId(null)
       setTick((t) => t + 1)
-    } catch {}
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to delete voucher')
+      setDeleteId(null)
+    }
   }
 
   const isExpired = (expiry: string) => new Date(expiry) < new Date()
@@ -270,7 +275,7 @@ export function Vouchers() {
             <button onClick={() => setShowModal(false)} className="btn-secondary">Cancel</button>
             <button
               onClick={handleSave}
-              disabled={!form.code.trim() || !form.value || !form.expiry || saving}
+              disabled={!form.code.trim() || !form.value || saving}
               className="btn-primary disabled:opacity-50 flex items-center gap-2"
             >
               {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}

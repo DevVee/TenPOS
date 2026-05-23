@@ -50,7 +50,9 @@ export function StaffForm() {
             active:    member.status === 'active',
           }))
         }
-      } catch {}
+      } catch (err) {
+        setSaveError(err instanceof Error ? err.message : 'Failed to load staff data')
+      }
       setLoadingData(false)
     }
     load()

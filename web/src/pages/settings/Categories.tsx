@@ -20,6 +20,7 @@ export function Categories() {
   const [inlineEdit, setInlineEdit] = useState<{ id: string; name: string } | null>(null)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
+  const [deleteError, setDeleteError] = useState('')
 
   const fetchCats = useCallback(
     () => apiGetCategories() as Promise<Category[]>,
@@ -64,11 +65,14 @@ export function Categories() {
 
   const handleDelete = async () => {
     if (!deleteId) return
+    setDeleteError('')
     try {
       await apiDeleteCategory(deleteId)
       setDeleteId(null)
       setTick((t) => t + 1)
-    } catch {}
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete category')
+    }
   }
 
   const saveInlineEdit = async () => {
@@ -77,7 +81,9 @@ export function Categories() {
       await apiUpdateCategory(inlineEdit.id, { name: inlineEdit.name.trim() })
       setInlineEdit(null)
       setTick((t) => t + 1)
-    } catch {}
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to update category')
+    }
   }
 
   return (
@@ -193,12 +199,13 @@ export function Categories() {
       </Modal>
 
       {/* Delete Confirm Modal */}
-      <Modal open={!!deleteId} onClose={() => setDeleteId(null)} title="Delete Category">
+      <Modal open={!!deleteId} onClose={() => { setDeleteId(null); setDeleteError('') }} title="Delete Category">
         <p className="text-sm text-gray-600 mb-5">
           Are you sure you want to delete <strong>{categories.find((c) => c.id === deleteId)?.name}</strong>? Products in this category will become uncategorized.
         </p>
+        {deleteError && <p className="text-xs text-red-600 mb-3">{deleteError}</p>}
         <div className="flex justify-end gap-2">
-          <button onClick={() => setDeleteId(null)} className="btn-secondary">Cancel</button>
+          <button onClick={() => { setDeleteId(null); setDeleteError('') }} className="btn-secondary">Cancel</button>
           <button onClick={handleDelete} className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">Delete</button>
         </div>
       </Modal>
