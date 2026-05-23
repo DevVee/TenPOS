@@ -14,6 +14,7 @@ const Login           = lazy(() => import('./pages/auth/Login')                 
 const POSTerminal     = lazy(() => import('./pages/pos/POSTerminal')               .then(m => ({ default: m.POSTerminal })))
 const Payment         = lazy(() => import('./pages/pos/Payment')                   .then(m => ({ default: m.Payment })))
 const Receipt         = lazy(() => import('./pages/pos/Receipt')                   .then(m => ({ default: m.Receipt })))
+const ShiftSummary    = lazy(() => import('./pages/pos/ShiftSummary')               .then(m => ({ default: m.ShiftSummary })))
 
 const Dashboard       = lazy(() => import('./pages/dashboard/Dashboard')           .then(m => ({ default: m.Dashboard })))
 
@@ -103,9 +104,10 @@ function BoundedRoutes() {
           <Route path="/login" element={<Login />} />
 
           {/* POS Terminal — full screen, no sidebar */}
-          <Route path="/pos"             element={<RequireAuth><POSLayout><POSTerminal /></POSLayout></RequireAuth>} />
-          <Route path="/pos/payment"     element={<RequireAuth><div className="min-h-screen bg-gray-50"><Payment /></div></RequireAuth>} />
-          <Route path="/pos/receipt/:id" element={<RequireAuth><div className="min-h-screen bg-gray-50 p-5"><Receipt /></div></RequireAuth>} />
+          <Route path="/pos"                  element={<RequireAuth><POSLayout><POSTerminal /></POSLayout></RequireAuth>} />
+          <Route path="/pos/payment"          element={<RequireAuth><div className="min-h-screen bg-gray-50"><Payment /></div></RequireAuth>} />
+          <Route path="/pos/receipt/:id"      element={<RequireAuth><div className="min-h-screen bg-gray-50 p-5"><Receipt /></div></RequireAuth>} />
+          <Route path="/pos/shift-summary"    element={<RequireAuth><POSLayout><ShiftSummary /></POSLayout></RequireAuth>} />
 
           {/* Management pages with sidebar */}
           <Route element={<RequireAuth><AppLayout /></RequireAuth>}>
@@ -236,7 +238,14 @@ function BoundedRoutes() {
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { isAuthenticated, isLoading } = useAuthStore()
-  if (isLoading) return <div className="min-h-screen bg-white" />
+  if (isLoading) return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-8 h-8 border-[3px] border-brand border-t-transparent rounded-full animate-spin" />
+        <span className="text-xs text-gray-400 font-medium">Loading…</span>
+      </div>
+    </div>
+  )
   if (!isAuthenticated) return <Navigate to="/login" replace />
   return <>{children}</>
 }

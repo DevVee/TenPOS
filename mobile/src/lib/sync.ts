@@ -178,15 +178,15 @@ export async function refreshVouchersCache(): Promise<CachedVoucher[]> {
   try {
     const { data, error } = await supabase
       .from('vouchers')
-      .select('id, code, discount_type, discount_value, min_purchase, max_uses, used_count, active, expires_at')
+      .select('id, code, type, value, min_purchase, max_uses, used_count, active, expires_at')
       .eq('active', true)
     if (error) throw error
 
     const vouchers: CachedVoucher[] = ((data ?? []) as Record<string, unknown>[]).map((v) => ({
       id:             v.id as string,
       code:           v.code as string,
-      discount_type:  v.discount_type as 'percent' | 'fixed',
-      discount_value: Number(v.discount_value),
+      discount_type:  v.type as 'percent' | 'fixed',
+      discount_value: Number(v.value),
       min_purchase:   Number(v.min_purchase ?? 0),
       max_uses:       Number(v.max_uses ?? 9999),
       used_count:     Number(v.used_count ?? 0),
@@ -288,7 +288,7 @@ export async function refreshTransactionCache(limitDays = 30): Promise<void> {
     })
 
     // Only replace synced transactions; keep any is_offline=true ones
-    const offlineTxns = await db.transactions.where('is_offline').equals(1).toArray()
+    const offlineTxns = await db.transactions.filter((t) => t.is_offline === true).toArray()
     await db.transactions.bulkPut([...txns, ...offlineTxns])
     appendSyncLog({ timestamp: Date.now(), type: 'cache', detail: 'Transactions refreshed', count: txns.length })
     emit('cache:updated')
@@ -326,23 +326,27 @@ export async function submitTransaction(
   const online = await isOnline()
 
   if (online) {
+    // Generate a stable key before the try block so retries on network failure
+    // hit the idempotency guard instead of creating duplicate transactions.
+    const onlineKey = uuid()
     try {
       const { data, error } = await supabase.rpc('create_transaction', {
-        p_branch_id:    payload.branch_id,
-        p_items:        payload.items.map((i) => ({
+        p_branch_id:       payload.branch_id,
+        p_items:           payload.items.map((i) => ({
           product_id: i.product_id,
           variant_id: i.variant_id ?? null,
           quantity:   i.quantity,
           discount:   i.discount,
           note:       i.note ?? null,
         })),
-        p_payments:     payload.payments.map((p) => ({
+        p_payments:        payload.payments.map((p) => ({
           method:    p.method,
           amount:    p.amount,
           reference: p.reference ?? null,
         })),
-        p_discount:     payload.discount,
-        p_voucher_code: payload.voucher_code ?? null,
+        p_discount:        payload.discount,
+        p_voucher_code:    payload.voucher_code ?? null,
+        p_idempotency_key: onlineKey,
       })
 
       if (error) throw error

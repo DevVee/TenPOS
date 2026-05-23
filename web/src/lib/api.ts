@@ -473,10 +473,12 @@ export async function apiUpdateProduct(id: string, data: Record<string, unknown>
 }
 
 export async function apiDeleteProduct(id: string) {
+  // Soft-delete: deactivate rather than hard-delete.
+  // Hard deletion would break historical transaction_items references and wipe sales history.
   const { data: p } = await supabase.from('products').select('name').eq('id', id).single()
-  const { error } = await supabase.from('products').delete().eq('id', id)
+  const { error } = await supabase.from('products').update({ active: false }).eq('id', id)
   if (error) throw new Error(error.message)
-  void addAudit('PRODUCT_DELETED', `Deleted product: ${p?.name ?? id}`, 'warning')
+  void addAudit('PRODUCT_DEACTIVATED', `Deactivated product: ${p?.name ?? id}`, 'warning')
   return { ok: true }
 }
 
@@ -885,10 +887,11 @@ export async function apiSalesReport(params: Record<string, string>) {
   const total_items_sold   = txns.reduce((s, t) => s + (t.transaction_items ?? []).reduce((is, i) => is + i.quantity, 0), 0)
   const avg_order_value    = transaction_count > 0 ? total_revenue / transaction_count : 0
 
-  // Last 7 days by date
+  // Build day buckets spanning the requested date range (not always last 7 days)
   const dayMap = new Map<string, { revenue: number; count: number }>()
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date(); d.setDate(d.getDate() - i)
+  const fromDate = params.from ? new Date(params.from) : new Date(Date.now() - 6 * 86400000)
+  const toDate   = params.to   ? new Date(params.to)   : new Date()
+  for (const d = new Date(fromDate); d <= toDate; d.setDate(d.getDate() + 1)) {
     dayMap.set(d.toISOString().slice(0, 10), { revenue: 0, count: 0 })
   }
   for (const t of txns) {
@@ -1109,8 +1112,8 @@ export async function apiGetStaff(params?: Record<string, string>) {
   if (params?.role)   q = q.eq('role', params.role)
   if (params?.status) q = q.eq('status', params.status)
   if (params?.q) {
-    const term = params.q
-    q = q.or(`name.ilike.%${term}%,email.ilike.%${term}%`)
+    const term = sanitizeSearchTerm(params.q)
+    if (term) q = q.or(`name.ilike.%${term}%,email.ilike.%${term}%`)
   }
   const limit = parseInt(params?.limit ?? '50', 10)
   q = q.order('name').limit(limit)
@@ -1272,8 +1275,8 @@ export async function apiGetAuditLog(params?: Record<string, string>) {
 
   if (params?.severity) q = q.eq('severity', params.severity)
   if (params?.q) {
-    const term = params.q
-    q = q.or(`action.ilike.%${term}%,details.ilike.%${term}%`)
+    const term = sanitizeSearchTerm(params.q)
+    if (term) q = q.or(`action.ilike.%${term}%,details.ilike.%${term}%`)
   }
 
   const page   = parseInt(params?.page  ?? '1',  10)

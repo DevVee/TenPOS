@@ -64,24 +64,29 @@ export function Payment() {
   const handleConfirm = async () => {
     if (cart.length === 0) return
     if (method === 'cash' && cashReceived < total) return
+    const branchId = user?.branch_id
+    if (!branchId) {
+      setCheckoutError('Your account has no branch assigned. Contact your administrator.')
+      return
+    }
     setProcessing(true)
     setCheckoutError('')
     try {
-      const branchId = user?.branch_id ?? 'main'
       const payments: PaymentType[] = [{
         method,
         amount: method === 'cash' ? cashReceived : total,
         reference: refInput.trim() || undefined,
       }]
       const result = await usePOSStore.getState().checkoutCart(
-        branchId, payments, 0,
+        branchId!, payments, 0,
         voucherResult?.valid ? voucherCode.trim() : undefined
       )
       navigate(`/pos/receipt/${result.id}`, {
         state: {
           transaction: {
-            receiptNo: result.receipt_no,
-            offline: result.offline,
+            receiptNo:  result.receipt_no,
+            offline:    result.offline,
+            created_at: new Date().toISOString(),
             items: cart.map((i) => ({
               name: i.product.name,
               qty: i.quantity,
@@ -105,7 +110,10 @@ export function Payment() {
     }
   }
 
-  const canConfirm = cart.length > 0 && !processing && (method !== 'cash' || cashReceived >= total)
+  const needsRef   = method === 'gcash' || method === 'paymaya' || method === 'card'
+  const canConfirm = cart.length > 0 && !processing
+    && (method !== 'cash' || cashReceived >= total)
+    && (!needsRef || refInput.trim().length > 0)
 
   return (
     <div className="min-h-screen bg-[#F5F5F7]">
@@ -140,7 +148,7 @@ export function Payment() {
                 {cart.map((item) => {
                   const unitPrice = item.product.price + (item.variant?.priceAdjustment ?? 0)
                   return (
-                    <div key={item.product.id} className="flex items-center gap-2.5">
+                    <div key={`${item.product.id}_${item.variant?.id ?? 'base'}`} className="flex items-center gap-2.5">
                       {item.product.imageUrl ? (
                         <img src={item.product.imageUrl} alt={item.product.name} className="w-8 h-8 rounded-lg object-cover flex-shrink-0 border border-gray-100" />
                       ) : (

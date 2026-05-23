@@ -12,6 +12,7 @@ interface ReceiptItem {
 interface ReceiptData {
   receiptNo: string
   offline: boolean
+  created_at?: string
   items: ReceiptItem[]
   subtotal: number
   voucherDiscount: number
@@ -30,7 +31,8 @@ export function Receipt() {
   const location = useLocation()
   const receipt = (location.state as { transaction?: ReceiptData } | null)?.transaction
 
-  const date = new Date().toLocaleDateString('en-PH', {
+  const dateObj = receipt?.created_at ? new Date(receipt.created_at) : new Date()
+  const date = dateObj.toLocaleDateString('en-PH', {
     year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
   })
 
@@ -89,7 +91,7 @@ export function Receipt() {
         {/* Items */}
         <div className="border-t border-dashed border-gray-200 pt-3 mb-3 space-y-2">
           {receipt.items.map((item, i) => (
-            <div key={i}>
+            <div key={`${item.name}-${i}`}>
               <p className="text-xs text-gray-800 font-medium">{item.name}</p>
               <div className="flex justify-between text-xs text-gray-500">
                 <span>
