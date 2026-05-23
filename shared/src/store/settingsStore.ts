@@ -5,6 +5,7 @@
 // ============================================================
 
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 import type { Category, Voucher } from '../types/index.js'
 import {
   CURRENCY,
@@ -75,32 +76,9 @@ type Actions =
   | 'update' | 'addCategory' | 'updateCategory' | 'deleteCategory'
   | 'addVoucher' | 'updateVoucher' | 'deleteVoucher' | 'applyVoucher'
 
-const DEFAULT_CATEGORIES: Category[] = [
-  { id: 'c1', name: 'Large Schoolbag',       icon: 'LS', active: true },
-  { id: 'c2', name: 'Medium Schoolbag',      icon: 'MS', active: true },
-  { id: 'c3', name: 'Super Large Schoolbag', icon: 'SL', active: true },
-  { id: 'c4', name: 'Lunch Bag',             icon: 'LB', active: true },
-]
-
-const DEFAULT_VOUCHERS: Voucher[] = [
-  {
-    id: 'v1', code: 'WELCOME10', type: 'percent', value: 10,
-    minOrder: 200, maxUses: 100, usedCount: 12, active: true,
-    expiry: '2024-12-31', description: '10% off for new customers',
-  },
-  {
-    id: 'v2', code: 'SAVE50', type: 'fixed', value: 50,
-    minOrder: 500, maxUses: 50, usedCount: 8, active: true,
-    expiry: '2024-06-30', description: '₱50 off orders above ₱500',
-  },
-  {
-    id: 'v3', code: 'SUMMER20', type: 'percent', value: 20,
-    minOrder: 1000, maxUses: 30, usedCount: 30, active: false,
-    expiry: '2024-03-31', description: 'Summer sale 20% off',
-  },
-]
-
-export const useSettingsStore = create<SettingsState>((set, get) => ({
+export const useSettingsStore = create<SettingsState>()(
+  persist(
+  (set, get) => ({
   // Store info
   storeName:     'Ten Foundation Philippines Inc.',
   address:       '123 Katipunan Ave, Quezon City, Metro Manila',
@@ -141,9 +119,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   // Locale
   language: DEFAULT_LOCALE,
 
-  // Data
-  categories: DEFAULT_CATEGORIES,
-  vouchers:   DEFAULT_VOUCHERS,
+  // Data (managed in Supabase — kept empty here; only used for local voucher apply)
+  categories: [] as Category[],
+  vouchers:   [] as Voucher[],
 
   // ─── Actions ────────────────────────────────────────────────────────────────
 
@@ -184,4 +162,6 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const discount = calcVoucherDiscount(v.type, v.value, orderTotal)
     return { valid: true, discount, message: `${v.description} — ₱${discount.toFixed(2)} off!` }
   },
-}))
+  }),
+  { name: 'tenpos-settings', version: 1 }
+))

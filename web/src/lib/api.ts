@@ -15,13 +15,14 @@ const PROJECT_REF  = _supabaseUrl.split('//')[1]?.split('.')[0] ?? ''
 const SESSION_KEY  = `sb-${PROJECT_REF}-auth-token`
 
 /**
- * Separate Supabase client used ONLY for creating new auth users (signUp).
- * persistSession: false ensures it never overwrites the admin's active session
- * in localStorage — the new user's session is discarded after we grab their ID.
+ * Admin Supabase client using the service role key.
+ * Used ONLY for staff creation via auth.admin.createUser() so that:
+ *  - Email confirmation is bypassed (email_confirm: true)
+ *  - The admin's active session in localStorage is never replaced
  */
-const _signupClient = createClient(
+const _adminClient = createClient(
   import.meta.env.VITE_SUPABASE_URL as string,
-  import.meta.env.VITE_SUPABASE_ANON_KEY as string,
+  import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY as string,
   { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } },
 )
 
@@ -546,7 +547,7 @@ export async function apiDeleteCategory(id: string) {
 interface SupabaseStockLevel {
   id: string; product_id: string; branch_id: string; variant_id: string | null
   stock: number; reorder_point: number
-  products: { name: string; sku: string; price: number | string; cost: number | string; categories: { name: string } | null } | null
+  products: { name: string; sku: string; price: number | string; cost: number | string; image_url: string | null; categories: { name: string } | null } | null
   branches: { name: string } | null
 }
 
@@ -558,13 +559,14 @@ function mapStockLevel(s: SupabaseStockLevel) {
     category_name: s.products?.categories?.name ?? '',
     price: Number(s.products?.price ?? 0),
     cost:  Number(s.products?.cost  ?? 0),
+    image_url: s.products?.image_url ?? undefined,
     branch_id: s.branch_id, branch_name: s.branches?.name ?? 'Unknown Branch',
     stock: s.stock, reorder_point: s.reorder_point,
     active: true,
   }
 }
 
-const STOCK_SELECT = '*, products(name, sku, price, cost, categories(name)), branches(name)'
+const STOCK_SELECT = '*, products(name, sku, price, cost, image_url, categories(name)), branches(name)'
 
 export async function apiGetInventory(branchId?: string) {
   let q = supabase.from('stock_levels').select(STOCK_SELECT)
@@ -1177,12 +1179,13 @@ export async function apiCreateStaff(data: Record<string, unknown>) {
     throw new Error('A password of at least 8 characters is required to create a staff account.')
   }
 
-  // 1. Create the Supabase Auth user via a non-persisting client so we don't
-  //    replace the current admin's session.
-  const { data: authData, error: signUpErr } = await _signupClient.auth.signUp({
+  // 1. Create the Supabase Auth user via the admin client (service role).
+  //    email_confirm: true bypasses the email confirmation flow so the
+  //    account is immediately active — no waiting for an inbox.
+  const { data: authData, error: signUpErr } = await _adminClient.auth.admin.createUser({
     email,
     password,
-    options: { emailRedirectTo: undefined },
+    email_confirm: true,
   })
   if (signUpErr) throw new Error(`Auth error: ${signUpErr.message}`)
   const authId = authData.user?.id
@@ -1202,9 +1205,9 @@ export async function apiCreateStaff(data: Record<string, unknown>) {
     .select('*').single()
 
   if (error) {
-    // The auth user was created but the staff row failed — sign out the
-    // orphaned account using the isolated client to prevent ghost users.
-    try { await _signupClient.auth.signOut() } catch { /* best effort */ }
+    // The auth user was created but the staff row failed — delete the
+    // orphaned auth account using the admin client to prevent ghost users.
+    try { await _adminClient.auth.admin.deleteUser(authId) } catch { /* best effort */ }
     throw new Error(`Auth account created but staff profile failed: ${error.message}. The auth user may need manual cleanup.`)
   }
 

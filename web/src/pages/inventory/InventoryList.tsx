@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from 'react'
-import { Search, Plus, Download, Upload, Loader2, Package, AlertTriangle, Layers } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Search, Plus, Download, Loader2, Package, AlertTriangle, Layers } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Badge } from '../../components/ui/Badge'
 import { PageHeader } from '../../components/ui/PageHeader'
@@ -22,6 +22,7 @@ interface InventoryItem {
   stock: number
   reorder_point: number
   active: boolean
+  image_url?: string
 }
 
 function StockBar({ stock, reorder }: { stock: number; reorder: number }) {
@@ -44,11 +45,9 @@ function StockBar({ stock, reorder }: { stock: number; reorder: number }) {
 
 export function InventoryList() {
   const navigate  = useNavigate()
-  const importRef = useRef<HTMLInputElement>(null)
   const [search,    setSearch]    = useState('')
   const [category,  setCategory]  = useState('All')
   const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'out'>('all')
-  const [importMsg, setImportMsg] = useState('')
 
   const { data, loading, error, refetch } = useApiData<InventoryItem[]>(
     () => apiGetInventory() as Promise<InventoryItem[]>
@@ -110,14 +109,6 @@ export function InventoryList() {
     )
   }
 
-  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setImportMsg(`"${file.name}" received — CSV import coming soon.`)
-    setTimeout(() => setImportMsg(''), 4000)
-    e.target.value = ''
-  }
-
   return (
     <div>
       <PageHeader
@@ -125,10 +116,6 @@ export function InventoryList() {
         subtitle={loading ? 'Loading…' : `${products.length} products · Stock value ${fmt(stockValue)}`}
         actions={
           <div className="flex gap-2">
-            <input ref={importRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleImportFile} />
-            <button onClick={() => importRef.current?.click()} className="btn-secondary">
-              <Upload className="w-3.5 h-3.5" /> Import
-            </button>
             <button onClick={handleExport} className="btn-secondary">
               <Download className="w-3.5 h-3.5" /> Export
             </button>
@@ -142,9 +129,6 @@ export function InventoryList() {
       {/* Alerts */}
       {error && (
         <div className="mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-100 text-sm text-red-600">{error}</div>
-      )}
-      {importMsg && (
-        <div className="mb-4 px-4 py-3 rounded-lg bg-blue-50 border border-blue-100 text-sm text-blue-700">{importMsg}</div>
       )}
 
       {/* KPI strip */}
@@ -256,6 +240,7 @@ export function InventoryList() {
               <table className="w-full">
                 <thead className="table-head">
                   <tr>
+                    <th className="w-10"></th>
                     <th>Product</th>
                     <th className="hidden sm:table-cell">Category</th>
                     <th className="text-right">Cost</th>
@@ -267,7 +252,7 @@ export function InventoryList() {
                 <tbody>
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={6}>
+                      <td colSpan={7}>
                         <EmptyState
                           icon={Package}
                           title="No products found"
@@ -286,6 +271,19 @@ export function InventoryList() {
                           className="table-row cursor-pointer"
                           onClick={() => navigate(`/inventory/${p.product_id}`)}
                         >
+                          <td className="pl-4 pr-1 py-2.5">
+                            {p.image_url ? (
+                              <img
+                                src={p.image_url}
+                                alt={p.product_name}
+                                className="w-9 h-9 rounded-lg object-cover bg-gray-100 flex-shrink-0"
+                              />
+                            ) : (
+                              <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+                                <Package className="w-4 h-4 text-gray-300" />
+                              </div>
+                            )}
+                          </td>
                           <td>
                             <p className="text-sm font-medium text-gray-800">{p.product_name}</p>
                             <p className="text-xs text-gray-400 font-mono mt-0.5">{p.sku}</p>

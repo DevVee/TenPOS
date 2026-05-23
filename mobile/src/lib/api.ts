@@ -16,12 +16,13 @@ import { submitTransaction as syncSubmitTransaction, refreshProductCache, refres
 import { v4 as uuid } from 'uuid'
 
 /**
- * Separate Supabase client for staff creation — persistSession:false so
- * signing up a new user never overwrites the admin's active session.
+ * Admin Supabase client using the service role key.
+ * Used ONLY for staff creation — auth.admin.createUser() bypasses email
+ * confirmation and never overwrites the admin's active session.
  */
-const _signupClient = createClient(
+const _adminClient = createClient(
   import.meta.env.VITE_SUPABASE_URL as string,
-  import.meta.env.VITE_SUPABASE_ANON_KEY as string,
+  import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY as string,
   { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } },
 )
 
@@ -1036,10 +1037,10 @@ export async function apiCreateStaff(data: Record<string, unknown>) {
     throw new Error('A password of at least 8 characters is required to create a staff account.')
   }
 
-  // 1. Create the Supabase Auth user via a non-persisting client so the admin's
-  //    active session in localStorage is never replaced by the new user's session.
-  const { data: authData, error: signUpErr } = await _signupClient.auth.signUp({
-    email, password, options: { emailRedirectTo: undefined },
+  // 1. Create the Supabase Auth user via the admin client (service role).
+  //    email_confirm: true bypasses confirmation so the account is immediately active.
+  const { data: authData, error: signUpErr } = await _adminClient.auth.admin.createUser({
+    email, password, email_confirm: true,
   })
   if (signUpErr) throw new Error(`Auth error: ${signUpErr.message}`)
   const authId = authData.user?.id

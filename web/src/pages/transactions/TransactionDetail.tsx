@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Printer, RotateCcw, XCircle, Loader2, AlertCircle, KeyRound, Eye, EyeOff } from 'lucide-react'
+import { ArrowLeft, Printer, RotateCcw, XCircle, Loader2, AlertCircle, KeyRound, Eye, EyeOff, Minus, Plus } from 'lucide-react'
 import { Badge } from '../../components/ui/Badge'
 import { Modal } from '../../components/ui/Modal'
-import { apiGetTransaction, apiVoidTransaction, apiVoidWithPin } from '../../lib/api'
+import { apiGetTransaction, apiVoidTransaction, apiVoidWithPin, apiReturnTransaction } from '../../lib/api'
 import { useApiData } from '../../hooks/useApiData'
 import { useAuthStore } from '../../store/authStore'
 
@@ -33,6 +33,13 @@ export function TransactionDetail() {
   const [voiding,     setVoiding]     = useState(false)
   const [voidError,   setVoidError]   = useState('')
 
+  // Return modal state
+  const [returnModal,   setReturnModal]   = useState(false)
+  const [returnQtys,    setReturnQtys]    = useState<Record<string, number>>({})
+  const [returning,     setReturning]     = useState(false)
+  const [returnError,   setReturnError]   = useState('')
+  const [returnSuccess, setReturnSuccess] = useState(false)
+
   const { data: tx, loading, error, refetch } = useApiData<TxDetail>(
     () => apiGetTransaction(id!) as Promise<TxDetail>,
     [id]
@@ -42,6 +49,58 @@ export function TransactionDetail() {
     setVoidStep('reason'); setVoidReason(''); setManagerPin('')
     setShowPin(false); setVoidError('')
     setVoidModal(true)
+  }
+
+  const openReturnModal = () => {
+    if (!tx) return
+    const initial: Record<string, number> = {}
+    tx.items.forEach((i) => { initial[i.id] = i.quantity })
+    setReturnQtys(initial)
+    setReturnError('')
+    setReturnSuccess(false)
+    setReturnModal(true)
+  }
+
+  const handleReturn = async () => {
+    if (!tx) return
+    const items = tx.items
+      .map((i) => ({ item_id: i.id, quantity: returnQtys[i.id] ?? 0 }))
+      .filter((i) => i.quantity > 0)
+    if (items.length === 0) { setReturnError('Select at least one item to return.'); return }
+    setReturning(true); setReturnError('')
+    try {
+      await apiReturnTransaction(tx.id, items)
+      setReturnSuccess(true)
+      setTimeout(() => { setReturnModal(false); refetch() }, 1500)
+    } catch (err) {
+      setReturnError(err instanceof Error ? err.message : 'Failed to process return')
+    } finally {
+      setReturning(false)
+    }
+  }
+
+  const handleReprint = () => {
+    if (!tx) return
+    const receiptData = {
+      receiptNo: tx.receipt_no,
+      offline: false,
+      created_at: tx.created_at,
+      cashierName: tx.staff_name,
+      items: tx.items.map((i) => ({
+        name: i.product_name,
+        qty: i.quantity,
+        price: Number(i.unit_price),
+        discount: Number(i.discount),
+        total: Number(i.total),
+      })),
+      subtotal: Number(tx.subtotal),
+      voucherDiscount: Number(tx.discount),
+      total: Number(tx.total),
+      paid: tx.payments.reduce((s, p) => s + Number(p.amount), 0),
+      change: Number(tx.change),
+      method: tx.payments[0]?.method ?? 'cash',
+    }
+    navigate(`/pos/receipt/${tx.id}`, { state: { transaction: receiptData } })
   }
 
   const handleNextStep = () => {
@@ -202,7 +261,7 @@ export function TransactionDetail() {
 
       <div className="flex flex-wrap gap-2">
         <button
-          onClick={() => window.print()}
+          onClick={handleReprint}
           className="btn-secondary flex items-center gap-1.5 flex-1 justify-center min-w-[120px]"
         >
           <Printer className="w-4 h-4" /> Reprint Receipt
@@ -210,9 +269,7 @@ export function TransactionDetail() {
         {tx.status === 'completed' && (
           <>
             <button
-              onClick={() => navigate('/returns', {
-                state: { preloadReturn: { id: tx.id, receipt_no: tx.receipt_no } },
-              })}
+              onClick={openReturnModal}
               className="btn-secondary flex items-center gap-1.5 flex-1 justify-center text-yellow-600 border-yellow-200 hover:bg-yellow-50"
             >
               <RotateCcw className="w-4 h-4" /> Return
@@ -328,6 +385,98 @@ export function TransactionDetail() {
               Authorize &amp; Void
             </button>
           </div>
+        </div>
+      </Modal>
+
+      {/* Return modal — inline item selection */}
+      <Modal
+        open={returnModal}
+        onClose={() => setReturnModal(false)}
+        title="Process Return"
+      >
+        <div className="space-y-4">
+          {returnSuccess ? (
+            <div className="flex items-center gap-3 p-4 bg-green-50 rounded-xl text-green-800">
+              <RotateCcw className="w-5 h-5 flex-shrink-0" />
+              <div>
+                <p className="font-semibold text-sm">Return processed!</p>
+                <p className="text-xs mt-0.5">Stock has been restored. Refreshing…</p>
+              </div>
+            </div>
+          ) : (
+            <>
+              <p className="text-sm text-gray-600">
+                Adjust quantities below — set to 0 to exclude an item from the return.
+                Stock will be restored and a return record created.
+              </p>
+
+              <div className="border border-gray-100 rounded-xl overflow-hidden">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Item</th>
+                      <th className="px-3 py-2 text-center text-xs font-medium text-gray-400">Sold</th>
+                      <th className="px-3 py-2 text-center text-xs font-medium text-gray-400">Returning</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tx.items.map((item) => (
+                      <tr key={item.id} className="border-t border-gray-50">
+                        <td className="px-3 py-2.5">
+                          <p className="text-sm font-medium text-gray-800">{item.product_name}</p>
+                          <p className="text-xs text-gray-400">{fmt(Number(item.unit_price))} each</p>
+                        </td>
+                        <td className="px-3 py-2.5 text-center text-sm text-gray-500">{item.quantity}</td>
+                        <td className="px-3 py-2.5">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setReturnQtys((q) => ({
+                                ...q, [item.id]: Math.max(0, (q[item.id] ?? 0) - 1)
+                              }))}
+                              className="w-6 h-6 rounded-md border border-gray-200 flex items-center justify-center hover:bg-gray-50 text-gray-500 transition-colors"
+                            >
+                              <Minus className="w-3 h-3" />
+                            </button>
+                            <span className="w-8 text-center text-sm font-semibold text-gray-800 tabular-nums">
+                              {returnQtys[item.id] ?? item.quantity}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setReturnQtys((q) => ({
+                                ...q, [item.id]: Math.min(item.quantity, (q[item.id] ?? item.quantity) + 1)
+                              }))}
+                              className="w-6 h-6 rounded-md border border-gray-200 flex items-center justify-center hover:bg-gray-50 text-gray-500 transition-colors"
+                            >
+                              <Plus className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {returnError && (
+                <div className="flex items-center gap-2 text-sm text-red-600">
+                  <AlertCircle className="w-4 h-4" /> {returnError}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-1">
+                <button onClick={() => setReturnModal(false)} className="btn-secondary">Cancel</button>
+                <button
+                  onClick={handleReturn}
+                  disabled={returning || tx.items.every((i) => (returnQtys[i.id] ?? 0) === 0)}
+                  className="bg-yellow-500 hover:bg-yellow-600 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                >
+                  {returning && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  Confirm Return
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </Modal>
     </div>

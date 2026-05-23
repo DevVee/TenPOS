@@ -309,3 +309,117 @@ export async function runBackup(): Promise<BackupMeta> {
   setLastBackup(meta)
   return meta
 }
+
+// ── SQL backup ────────────────────────────────────────────────────────────────
+
+/** Escape a value for PostgreSQL INSERT statement */
+function sqlVal(v: unknown): string {
+  if (v === null || v === undefined) return 'NULL'
+  if (typeof v === 'boolean') return v ? 'TRUE' : 'FALSE'
+  if (typeof v === 'number') return String(v)
+  // String — escape single quotes by doubling them
+  return `'${String(v).replace(/'/g, "''")}'`
+}
+
+function insertRows(table: string, cols: string[], rows: unknown[][]): string {
+  if (rows.length === 0) return `-- (no rows in ${table})\n`
+  const colList = cols.map((c) => `"${c}"`).join(', ')
+  return rows
+    .map((row) => `INSERT INTO "${table}" (${colList}) VALUES (${row.map(sqlVal).join(', ')});`)
+    .join('\n') + '\n'
+}
+
+/**
+ * Generates a PostgreSQL-compatible .sql dump of all operational data and
+ * triggers a browser download.  The file contains only INSERT statements —
+ * no CREATE TABLE — so it can be imported into any existing TenPOS schema.
+ */
+export async function runSQLBackup(): Promise<void> {
+  const now     = new Date()
+  const dateStr = now.toISOString().slice(0, 10)
+
+  const [txnRes, productsRes, categories, staffRes, vouchersRes] = await Promise.all([
+    apiGetTransactions({ limit: '99999', sort: 'desc' }) as Promise<{
+      data: Array<{
+        id: string; receipt_no: string; created_at: string; staff_name: string
+        subtotal: number; discount: number; total: number
+        payment_method: string; status: string
+        items: Array<{ product_name: string; quantity: number; unit_price: number; total: number }>
+      }>
+    }>,
+    apiGetProducts({ limit: '99999' }) as unknown as Promise<{
+      data: Array<{
+        id: string; product_name: string; sku: string; category_name: string
+        price: number; cost: number; stock: number; reorder_point: number; active: boolean
+      }>
+    }>,
+    apiGetCategories() as Promise<Array<{ id: string; name: string; description?: string }>>,
+    apiGetStaff({ limit: '9999' }) as Promise<{
+      data: Array<{ id: string; name: string; email: string; role: string; branch: string; status: string; created_at: string }>
+    }>,
+    apiGetVouchers({ limit: '9999' }) as unknown as Promise<{
+      data: Array<{
+        id: string; code: string; discount_type: string; discount_value: number
+        min_purchase: number; max_uses: number; used_count: number
+        active: boolean; expires_at?: string; created_at: string
+      }>
+    }>,
+  ])
+
+  const transactions = txnRes.data      ?? []
+  const products     = productsRes.data ?? []
+  const staff        = staffRes.data    ?? []
+  const vouchers     = vouchersRes.data ?? []
+  const cats         = Array.isArray(categories) ? categories : []
+
+  const header = [
+    `-- ============================================================`,
+    `-- TenPOS — SQL Data Backup`,
+    `-- Generated: ${now.toLocaleString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`,
+    `-- Records: ${transactions.length} transactions · ${products.length} products · ${staff.length} staff · ${cats.length} categories · ${vouchers.length} vouchers`,
+    `-- Application: TenPOS — Ten Foundation Philippines Inc.`,
+    `-- NOTE: These are INSERT statements only. Your schema must already exist.`,
+    `-- ============================================================`,
+    ``,
+    `BEGIN;`,
+    ``,
+  ].join('\n')
+
+  const txSection =
+    `-- ── Transactions (${transactions.length} rows) ──────────────────────────────────────────\n` +
+    insertRows('transactions', ['id', 'receipt_no', 'created_at', 'staff_name', 'subtotal', 'discount', 'total', 'payment_method', 'status'],
+      transactions.map((t) => [t.id, t.receipt_no, t.created_at, t.staff_name, t.subtotal, t.discount, t.total, t.payment_method, t.status]))
+
+  const productSection =
+    `\n-- ── Products (${products.length} rows) ─────────────────────────────────────────────────\n` +
+    insertRows('products', ['id', 'product_name', 'sku', 'category_name', 'price', 'cost', 'stock', 'reorder_point', 'active'],
+      products.map((p) => [p.id, p.product_name, p.sku, p.category_name, p.price, p.cost, p.stock, p.reorder_point, p.active]))
+
+  const catSection =
+    `\n-- ── Categories (${cats.length} rows) ────────────────────────────────────────────────\n` +
+    insertRows('categories', ['id', 'name', 'description'],
+      cats.map((c) => [c.id, c.name, c.description ?? '']))
+
+  const staffSection =
+    `\n-- ── Staff (${staff.length} rows) ───────────────────────────────────────────────────────\n` +
+    insertRows('staff', ['id', 'name', 'email', 'role', 'branch', 'status', 'created_at'],
+      staff.map((u) => [u.id, u.name, u.email, u.role, u.branch ?? 'Unknown Branch', u.status, u.created_at]))
+
+  const voucherSection =
+    `\n-- ── Vouchers (${vouchers.length} rows) ──────────────────────────────────────────────────\n` +
+    insertRows('vouchers', ['id', 'code', 'discount_type', 'discount_value', 'min_purchase', 'max_uses', 'used_count', 'active', 'expires_at', 'created_at'],
+      vouchers.map((v) => [v.id, v.code, v.discount_type, v.discount_value, v.min_purchase, v.max_uses, v.used_count, v.active, v.expires_at ?? null, v.created_at]))
+
+  const footer = `\nCOMMIT;\n`
+
+  const sql = header + txSection + productSection + catSection + staffSection + voucherSection + footer
+
+  // Trigger download
+  const blob = new Blob([sql], { type: 'application/sql' })
+  const url  = URL.createObjectURL(blob)
+  const a    = document.createElement('a')
+  a.href     = url
+  a.download = `TenPOS-Backup-${dateStr}.sql`
+  a.click()
+  URL.revokeObjectURL(url)
+}

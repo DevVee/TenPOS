@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { useState, useEffect, useRef } from 'react'
 import { usePOSStore } from '../../store/posStore'
 import { useAuthStore } from '../../store/authStore'
+import { useBranchStore } from '../../store/branchStore'
 import { useNavigate } from 'react-router-dom'
 import type { User } from '../../types'
 
@@ -151,6 +152,14 @@ function ProfileMenu({ user }: { user: User }) {
 export function TopBar({ onToggleSidebar }: TopBarProps) {
   const { syncStatus } = usePOSStore()
   const { user } = useAuthStore()
+  const { activeBranchName } = useBranchStore()
+
+  // Admins see the selected active branch (or their own if none set).
+  // Managers & cashiers always see their own branch.
+  const branchLabel =
+    user?.role === 'admin'
+      ? (activeBranchName ?? user?.branch)
+      : user?.branch
 
   return (
     <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-4 gap-4 flex-shrink-0">
@@ -172,10 +181,10 @@ export function TopBar({ onToggleSidebar }: TopBarProps) {
         <SyncIndicator status={syncStatus} />
 
         {/* Branch indicator */}
-        {user?.branch && (
+        {branchLabel && (
           <div className="hidden lg:flex items-center gap-1.5 text-xs text-gray-500 font-medium px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg">
             <MapPin className="w-3 h-3 text-gray-400" />
-            <span className="truncate max-w-[120px]">{user.branch}</span>
+            <span className="truncate max-w-[140px]">{branchLabel}</span>
           </div>
         )}
 

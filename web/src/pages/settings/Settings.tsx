@@ -6,7 +6,7 @@ import { useSettingsStore } from '../../store/settingsStore'
 import { useAuthStore } from '../../store/authStore'
 import { apiGetMyPinStatus, apiSetOverridePin, apiClearOverridePin } from '../../lib/api'
 import {
-  runBackup, getLastBackup, isAutoBackupEnabled, setAutoBackupEnabled,
+  runBackup, runSQLBackup, getLastBackup, isAutoBackupEnabled, setAutoBackupEnabled,
   isAutoBackupDue, daysSinceLastBackup, type BackupMeta,
 } from '../../lib/backup'
 
@@ -57,6 +57,9 @@ export function Settings() {
   const [backupDone,     setBackupDone]     = useState(false)
   const [lastBackup,     setLastBackup]     = useState<BackupMeta | null>(() => getLastBackup())
   const [autoBackup,     setAutoBackup]     = useState(() => isAutoBackupEnabled())
+  const [sqlRunning,     setSqlRunning]     = useState(false)
+  const [sqlDone,        setSqlDone]        = useState(false)
+  const [sqlError,       setSqlError]       = useState('')
 
   const handleToggleAutoBackup = (v: boolean) => {
     setAutoBackup(v)
@@ -76,6 +79,21 @@ export function Settings() {
       setBackupError(err instanceof Error ? err.message : 'Backup failed. Please try again.')
     } finally {
       setBackupRunning(false)
+    }
+  }, [])
+
+  const handleSQLBackup = useCallback(async () => {
+    setSqlRunning(true)
+    setSqlError('')
+    setSqlDone(false)
+    try {
+      await runSQLBackup()
+      setSqlDone(true)
+      setTimeout(() => setSqlDone(false), 4000)
+    } catch (err) {
+      setSqlError(err instanceof Error ? err.message : 'SQL export failed. Please try again.')
+    } finally {
+      setSqlRunning(false)
     }
   }, [])
 
@@ -388,7 +406,7 @@ export function Settings() {
 
               <div className="mt-5 pt-4 border-t border-gray-100">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Format</p>
-                <div className="flex items-start gap-2.5">
+                <div className="flex items-start gap-2.5 mb-4">
                   <div className="w-6 h-6 rounded-md bg-emerald-50 border border-emerald-100 flex items-center justify-center flex-shrink-0 mt-0.5">
                     <span className="text-[9px] font-black text-emerald-700 leading-none">XLS</span>
                   </div>
@@ -400,6 +418,37 @@ export function Settings() {
                     </p>
                   </div>
                 </div>
+
+                {/* SQL export */}
+                <div className="flex items-start gap-2.5 mb-3">
+                  <div className="w-6 h-6 rounded-md bg-blue-50 border border-blue-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <span className="text-[9px] font-black text-blue-700 leading-none">SQL</span>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-700">PostgreSQL (.sql) — INSERT dump</p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      All records as INSERT statements — import into any PostgreSQL-compatible database.
+                    </p>
+                  </div>
+                </div>
+                {sqlError && (
+                  <div className="flex items-center gap-2 text-sm text-red-600 mb-2">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0" /> {sqlError}
+                  </div>
+                )}
+                <button
+                  onClick={handleSQLBackup}
+                  disabled={sqlRunning}
+                  className="btn-secondary flex items-center gap-2 text-sm"
+                >
+                  {sqlRunning ? (
+                    <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Exporting SQL…</>
+                  ) : sqlDone ? (
+                    <><Check className="w-3.5 h-3.5 text-green-600" /> Downloaded!</>
+                  ) : (
+                    <><Download className="w-3.5 h-3.5" /> Export SQL</>
+                  )}
+                </button>
               </div>
             </div>
           </div>

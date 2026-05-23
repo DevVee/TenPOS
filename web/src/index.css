@@ -305,11 +305,26 @@
     font-size: 11pt;
   }
 
+  /* ── Black & white thermal output ───────────────────────────────────────── */
+  /* Force all text to black — no colors on thermal paper */
+  * {
+    color: #000 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  /* Strip all colored backgrounds */
+  [class*="bg-brand"],
+  [class*="bg-green-"],  [class*="bg-red-"],
+  [class*="bg-amber-"],  [class*="bg-yellow-"],
+  [class*="bg-blue-"],   [class*="bg-emerald-"],
+  [class*="bg-gray-"] { background: transparent !important; }
+
   /* Receipt card — no shadow, no border, full width */
   .card {
     box-shadow: none !important;
     border: none !important;
     border-radius: 0 !important;
+    background: white !important;
   }
 
   /* Print-friendly monospace text */
