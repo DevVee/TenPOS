@@ -583,8 +583,8 @@ interface CartPanelProps {
   subtotal: number
   discountInput: Record<string, string>
   setDiscountInput: React.Dispatch<React.SetStateAction<Record<string, string>>>
-  removeFromCart: (id: string) => void
-  updateQty: (id: string, qty: number) => void
+  removeFromCart: (id: string, variantId?: string) => void
+  updateQty: (id: string, qty: number, variantId?: string) => void
   clearCart: () => void
   navigate: (path: string) => void
   onCheckout?: () => void
