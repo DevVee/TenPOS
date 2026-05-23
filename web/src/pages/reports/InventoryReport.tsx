@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+﻿import { useState, useMemo } from 'react'
 import { Download, Loader2, Search, AlertTriangle } from 'lucide-react'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { downloadXLSX } from '../../lib/xlsxExport'
@@ -166,10 +166,10 @@ export function InventoryReport() {
       ) : (
         <>
           <div className="grid sm:grid-cols-4 gap-3 mb-5">
-            <StatCard label="Stock Value"    value={fmt(totalStockValue)} subLabel="At cost price"        icon={Package} />
-            <StatCard label="Restocked (30d)" value={`+${restockedQty} units`} subLabel="Stock additions" icon={TrendingUp}   iconColor="text-green-600" iconBg="bg-green-50" />
-            <StatCard label="Removed (30d)"  value={`${shrinkageQty} units`} subLabel="Damage / adjustments" icon={TrendingDown} iconColor="text-red-600"   iconBg="bg-red-50" />
-            <StatCard label="Low Stock"      value={String(lowStockCount)} subLabel="At or below reorder" icon={AlertTriangle} iconColor="text-yellow-600" iconBg="bg-yellow-50" />
+            <StatCard label="Stock Value"     value={fmt(totalStockValue)}        subLabel="At cost price"         icon={Package}       iconColor="blue"    />
+            <StatCard label="Restocked (30d)" value={`+${restockedQty} units`}   subLabel="Stock additions"       icon={TrendingUp}    iconColor="emerald" />
+            <StatCard label="Removed (30d)"   value={`${shrinkageQty} units`}    subLabel="Damage / adjustments"  icon={TrendingDown}  iconColor="red"     />
+            <StatCard label="Low Stock"       value={String(lowStockCount)}       subLabel="At or below reorder"   icon={AlertTriangle} iconColor="amber"   />
           </div>
 
           <div className="card p-4 mb-4">
@@ -189,7 +189,7 @@ export function InventoryReport() {
             )}
           </div>
 
-          {/* ── Filters bar ─────────────────────────────────────────────── */}
+          {/* â”€â”€ Filters bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
           <div className="flex flex-wrap gap-2 mb-3">
             {/* Search */}
             <div className="relative flex-1 min-w-[200px]">
@@ -198,7 +198,7 @@ export function InventoryReport() {
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search product or SKU…"
+                placeholder="Search product or SKUâ€¦"
                 className="input-base pl-8 py-1.5 text-sm w-full"
               />
             </div>

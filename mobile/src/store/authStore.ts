@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import type { User } from '../types'
-import { apiMe, clearTokens, getToken } from '../lib/api'
+import { supabase } from '../lib/supabase'
+import { db } from '../lib/db'
+import { clearTokens } from '../lib/api'
 
 interface AuthState {
   user: User | null
@@ -11,6 +13,7 @@ interface AuthState {
   logout: () => void
   lockPin: () => void
   unlockPin: () => void
+  updateUser: (patch: Partial<User>) => void
   restoreSession: () => Promise<void>
 }
 
@@ -22,6 +25,8 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   login: (user) => set({ user, isAuthenticated: true, pinLocked: false }),
 
+  updateUser: (patch) => set((s) => ({ user: s.user ? { ...s.user, ...patch } : s.user })),
+
   logout: () => {
     clearTokens()
     set({ user: null, isAuthenticated: false, pinLocked: false })
@@ -31,34 +36,95 @@ export const useAuthStore = create<AuthState>((set) => ({
   unlockPin: () => set({ pinLocked: false }),
 
   restoreSession: async () => {
-    const token = getToken()
-    if (!token) {
-      set({ isLoading: false })
-      return
-    }
     try {
-      const me = await apiMe()
-      const initials = me.name
+      // getSession() validates JWT locally — no network needed
+      const { data: { session } } = await supabase.auth.getSession()
+
+      if (!session) {
+        set({ isLoading: false })
+        return
+      }
+
+      // Try Dexie cache first (works fully offline)
+      const cachedStaff = await db.staff.where('auth_id').equals(session.user.id).first()
+      if (cachedStaff) {
+        const initials = cachedStaff.name
+          .split(' ')
+          .map((n) => n[0])
+          .join('')
+          .slice(0, 2)
+          .toUpperCase()
+
+        set({
+          user: {
+            id:             cachedStaff.id,
+            name:           cachedStaff.name,
+            email:          cachedStaff.email,
+            role:           cachedStaff.role as User['role'],
+            avatarInitials: initials,
+            branch:         'Main Branch',
+            branch_id:      cachedStaff.branch_id,
+          },
+          isAuthenticated: true,
+          isLoading: false,
+        })
+        return
+      }
+
+      // No Dexie cache yet — need network to fetch staff row
+      if (!navigator.onLine) {
+        // Can't restore without cache and without network
+        set({ isLoading: false })
+        return
+      }
+
+      const { data: staff, error: staffErr } = await supabase
+        .from('staff')
+        .select('id, name, email, role, branch_id, status, sales_count')
+        .eq('auth_id', session.user.id)
+        .single()
+
+      if (staffErr || !staff) {
+        set({ isLoading: false })
+        return
+      }
+
+      const s = staff as Record<string, unknown>
+
+      // Warm the Dexie cache
+      await db.staff.put({
+        id:          s.id as string,
+        auth_id:     session.user.id,
+        name:        s.name as string,
+        email:       (s.email as string | null) ?? (session.user.email ?? ''),
+        role:        s.role as string,
+        branch_id:   s.branch_id as string | null,
+        status:      s.status as string,
+        sales_count: Number(s.sales_count ?? 0),
+        cached_at:   Date.now(),
+      })
+
+      const initials = (s.name as string)
         .split(' ')
-        .map((n) => n[0])
+        .map((n: string) => n[0])
         .join('')
         .slice(0, 2)
         .toUpperCase()
+
       set({
         user: {
-          id: me.id,
-          name: me.name,
-          email: me.email,
-          role: me.role as User['role'],
+          id:             s.id as string,
+          name:           s.name as string,
+          email:          (s.email as string | null) ?? (session.user.email ?? ''),
+          role:           s.role as User['role'],
           avatarInitials: initials,
-          branch: 'Main Branch',
-          branch_id: me.branch_id,
+          branch:         'Main Branch',
+          branch_id:      s.branch_id as string | null,
         },
         isAuthenticated: true,
         isLoading: false,
       })
     } catch {
-      clearTokens()
       set({ user: null, isAuthenticated: false, isLoading: false })
     }
   },

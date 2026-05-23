@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, Component } from 'react'
 import type { ReactNode, ErrorInfo } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from './store/authStore'
+import type { UserRole } from './types'
 
 import { AppLayout }  from './components/layout/AppLayout'
 
@@ -108,38 +109,121 @@ function BoundedRoutes() {
 
           {/* Management pages with sidebar */}
           <Route element={<RequireAuth><AppLayout /></RequireAuth>}>
-            <Route path="/dashboard"                   element={<Dashboard />} />
-            <Route path="/transactions"                element={<TransactionList />} />
-            <Route path="/transactions/:id"            element={<TransactionDetail />} />
+            {/* All authenticated staff can view the dashboard */}
+            <Route path="/dashboard"        element={<Dashboard />} />
 
-            <Route path="/returns"                     element={<Returns />} />
+            {/* Transactions — all staff (cashiers see their own via RLS) */}
+            <Route path="/transactions"     element={<TransactionList />} />
+            <Route path="/transactions/:id" element={<TransactionDetail />} />
 
-            <Route path="/inventory"                   element={<InventoryList />} />
-            <Route path="/inventory/add"               element={<ProductForm />} />
-            <Route path="/inventory/edit/:id"          element={<ProductForm />} />
-            <Route path="/inventory/adjustments"       element={<StockAdjustments />} />
-            <Route path="/inventory/low-stock"         element={<LowStock />} />
-            <Route path="/inventory/:id"               element={<ProductDetail />} />
+            {/* Returns & voids — managers and admins only */}
+            <Route path="/returns" element={
+              <RequireRole roles={['admin', 'manager']}>
+                <Returns />
+              </RequireRole>
+            } />
 
-            <Route path="/reports/sales"               element={<SalesReport />} />
-            <Route path="/reports/staff"               element={<StaffReport />} />
-            <Route path="/reports/financial"           element={<FinancialReport />} />
-            <Route path="/reports/inventory"           element={<InventoryReport />} />
+            {/* Inventory — managers and admins can write; viewers can read */}
+            <Route path="/inventory"             element={<InventoryList />} />
+            <Route path="/inventory/low-stock"   element={<LowStock />} />
+            <Route path="/inventory/:id"         element={<ProductDetail />} />
+            <Route path="/inventory/add"         element={
+              <RequireRole roles={['admin', 'manager']}>
+                <ProductForm />
+              </RequireRole>
+            } />
+            <Route path="/inventory/edit/:id"    element={
+              <RequireRole roles={['admin', 'manager']}>
+                <ProductForm />
+              </RequireRole>
+            } />
+            <Route path="/inventory/adjustments" element={
+              <RequireRole roles={['admin', 'manager']}>
+                <StockAdjustments />
+              </RequireRole>
+            } />
 
-            <Route path="/staff"                       element={<StaffList />} />
-            <Route path="/staff/new"                   element={<StaffForm />} />
-            <Route path="/staff/:id"                   element={<StaffDetail />} />
-            <Route path="/staff/edit/:id"              element={<StaffForm />} />
+            {/* Reports — managers, admins, and viewers */}
+            <Route path="/reports/sales"      element={
+              <RequireRole roles={['admin', 'manager', 'viewer']}>
+                <SalesReport />
+              </RequireRole>
+            } />
+            <Route path="/reports/staff"      element={
+              <RequireRole roles={['admin', 'manager', 'viewer']}>
+                <StaffReport />
+              </RequireRole>
+            } />
+            <Route path="/reports/financial"  element={
+              <RequireRole roles={['admin', 'manager', 'viewer']}>
+                <FinancialReport />
+              </RequireRole>
+            } />
+            <Route path="/reports/inventory"  element={
+              <RequireRole roles={['admin', 'manager', 'viewer']}>
+                <InventoryReport />
+              </RequireRole>
+            } />
 
-            <Route path="/settings"                    element={<Settings />} />
-            <Route path="/settings/branches"           element={<Branches />} />
-            <Route path="/settings/categories"         element={<Categories />} />
-            <Route path="/settings/vouchers"           element={<Vouchers />} />
-            <Route path="/settings/sync-log"           element={<SyncLog />} />
+            {/* Staff management — managers and admins only */}
+            <Route path="/staff"          element={
+              <RequireRole roles={['admin', 'manager']}>
+                <StaffList />
+              </RequireRole>
+            } />
+            <Route path="/staff/new"      element={
+              <RequireRole roles={['admin', 'manager']}>
+                <StaffForm />
+              </RequireRole>
+            } />
+            <Route path="/staff/:id"      element={
+              <RequireRole roles={['admin', 'manager']}>
+                <StaffDetail />
+              </RequireRole>
+            } />
+            <Route path="/staff/edit/:id" element={
+              <RequireRole roles={['admin', 'manager']}>
+                <StaffForm />
+              </RequireRole>
+            } />
 
-            <Route path="/audit"                       element={<AuditLog />} />
+            {/* Settings — managers and admins */}
+            <Route path="/settings"           element={
+              <RequireRole roles={['admin', 'manager']}>
+                <Settings />
+              </RequireRole>
+            } />
+            <Route path="/settings/categories" element={
+              <RequireRole roles={['admin', 'manager']}>
+                <Categories />
+              </RequireRole>
+            } />
+            <Route path="/settings/vouchers"  element={
+              <RequireRole roles={['admin', 'manager']}>
+                <Vouchers />
+              </RequireRole>
+            } />
+            <Route path="/settings/sync-log"  element={
+              <RequireRole roles={['admin', 'manager']}>
+                <SyncLog />
+              </RequireRole>
+            } />
+            {/* Branches — admins only */}
+            <Route path="/settings/branches"  element={
+              <RequireRole roles={['admin']}>
+                <Branches />
+              </RequireRole>
+            } />
 
-            <Route path="/profile"                     element={<ProfileSettings />} />
+            {/* Audit log — managers and admins */}
+            <Route path="/audit" element={
+              <RequireRole roles={['admin', 'manager']}>
+                <AuditLog />
+              </RequireRole>
+            } />
+
+            {/* Profile — all authenticated staff */}
+            <Route path="/profile" element={<ProfileSettings />} />
           </Route>
 
           <Route path="/"  element={<Navigate to="/login" replace />} />
@@ -154,6 +238,19 @@ function RequireAuth({ children }: { children: ReactNode }) {
   const { isAuthenticated, isLoading } = useAuthStore()
   if (isLoading) return <div className="min-h-screen bg-white" />
   if (!isAuthenticated) return <Navigate to="/login" replace />
+  return <>{children}</>
+}
+
+/**
+ * Role-based guard. Redirects cashiers to /pos and viewers/unknown roles to
+ * /dashboard when they try to access pages they are not allowed to see.
+ */
+function RequireRole({ roles, children }: { roles: UserRole[]; children: ReactNode }) {
+  const { user } = useAuthStore()
+  if (!user) return <Navigate to="/login" replace />
+  if (!roles.includes(user.role as UserRole)) {
+    return <Navigate to={user.role === 'cashier' ? '/pos' : '/dashboard'} replace />
+  }
   return <>{children}</>
 }
 

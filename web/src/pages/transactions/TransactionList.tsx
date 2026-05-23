@@ -5,7 +5,7 @@ import { Badge } from '../../components/ui/Badge'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { apiGetTransactions } from '../../lib/api'
 import { subscribeTransactions } from '../../lib/realtime'
-import { downloadCSV } from '../../lib/csvExport'
+import { downloadXLSX } from '../../lib/xlsxExport'
 
 function fmt(n: number) { return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2 })}` }
 
@@ -81,19 +81,40 @@ export function TransactionList() {
   }
 
   const handleExport = () => {
-    downloadCSV(
-      `transactions-${new Date().toISOString().slice(0, 10)}`,
-      ['Receipt #', 'Date', 'Time', 'Cashier', 'Items', 'Payment Method', 'Status', 'Total'],
-      transactions.map((t) => [
-        t.receipt_no,
-        new Date(t.created_at).toLocaleDateString('en-PH'),
-        new Date(t.created_at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }),
-        t.staff_name,
-        (t.items as unknown[]).length,
-        t.payment_method,
-        t.status,
-        Number(t.total),
-      ])
+    const today = new Date().toISOString().slice(0, 10)
+    downloadXLSX(
+      `TenPOS-Transactions-${today}`,
+      [{
+        name: 'Transactions',
+        periodLabel: dateFrom || dateTo ? `${dateFrom || '…'} → ${dateTo || today}` : 'All dates',
+        columns: [
+          { header: 'Receipt #',      width: 16 },
+          { header: 'Date',           type: 'date',   width: 14 },
+          { header: 'Time',           width: 10 },
+          { header: 'Cashier',        width: 22 },
+          { header: 'Items',          type: 'number', width: 8  },
+          { header: 'Payment Method', width: 18 },
+          { header: 'Status',         width: 12 },
+          { header: 'Total',          type: 'money',  width: 16 },
+        ],
+        rows: transactions.map((t) => [
+          t.receipt_no,
+          new Date(t.created_at).toLocaleDateString('en-PH'),
+          new Date(t.created_at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }),
+          t.staff_name,
+          (t.items as unknown[]).length,
+          t.payment_method,
+          t.status,
+          Number(t.total),
+        ]),
+        totalsRow: [
+          `${transactions.length} transactions`, '', '', '',
+          transactions.reduce((s, t) => s + (t.items as unknown[]).length, 0),
+          '', '',
+          transactions.reduce((s, t) => s + Number(t.total), 0),
+        ],
+      }],
+      'Transaction List'
     )
   }
 
@@ -182,27 +203,27 @@ export function TransactionList() {
       )}
 
       {error && (
-        <div className="card p-4 mb-4 text-sm text-red-600 bg-red-50 border-red-100">{error}</div>
+        <div className="mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-100 text-sm text-red-600">{error}</div>
       )}
 
       <div className="card overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center h-48">
-            <Loader2 className="w-6 h-6 animate-spin text-brand" />
+            <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
           </div>
         ) : (
           <>
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-100">
+                <thead className="table-head">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Receipt #</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Date & Time</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 hidden md:table-cell">Cashier</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 hidden sm:table-cell">Items</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Method</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Status</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">Total</th>
+                    <th>Receipt #</th>
+                    <th>Date &amp; Time</th>
+                    <th className="hidden md:table-cell">Cashier</th>
+                    <th className="hidden sm:table-cell">Items</th>
+                    <th>Method</th>
+                    <th>Status</th>
+                    <th className="text-right">Total</th>
                   </tr>
                 </thead>
                 <tbody>

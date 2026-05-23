@@ -1,9 +1,10 @@
-import { useState, useCallback } from 'react'
+﻿import { useState, useCallback, useEffect } from 'react'
 import { Plus, Search, Loader2, AlertCircle } from 'lucide-react'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { Badge } from '../../components/ui/Badge'
 import { Modal } from '../../components/ui/Modal'
 import { apiGetAdjustments, apiCreateAdjustment, apiGetInventory } from '../../lib/api'
+import { supabase } from '../../lib/supabase'
 import { useApiData } from '../../hooks/useApiData'
 import { useAuthStore } from '../../store/authStore'
 
@@ -43,6 +44,19 @@ export function StockAdjustments() {
   )
   const products = invData ?? []
 
+  // ── Realtime: refresh list when any adjustment is added anywhere ─────────────
+  useEffect(() => {
+    const channel = supabase
+      .channel('stock-adjustments-rt')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'stock_adjustments' },
+        () => setTick((t) => t + 1),
+      )
+      .subscribe()
+    return () => { void supabase.removeChannel(channel) }
+  }, [])
+
   const filtered = adjustments.filter((a) => {
     if (!search) return true
     const q = search.toLowerCase()
@@ -63,6 +77,7 @@ export function StockAdjustments() {
       })
       setModal(false)
       setForm(BLANK)
+      // tick bumped by realtime; manual bump as fallback
       setTick((t) => t + 1)
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Failed to save adjustment')
@@ -178,7 +193,7 @@ export function StockAdjustments() {
             <input
               type="number"
               className="input-base"
-              placeholder={form.type === 'recount' ? 'Actual count' : 'Units to adjust'}
+              placeholder={form.type === 'correction' ? 'Actual count (sets stock to this value)' : 'Units to adjust'}
               value={form.qty}
               onChange={(e) => setForm((f) => ({ ...f, qty: e.target.value }))}
             />

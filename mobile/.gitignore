@@ -25,3 +25,14 @@ dist-ssr
 
 # Claude Code local settings (contains sensitive permission rules)
 .claude/settings.local.json
+
+# Capacitor — generated native project (rebuild with: npm run cap:sync)
+# Commit android/ only if you need CI/CD to build APKs without npm install
+# android/
+
+# ── Signing — NEVER commit these ─────────────────────────────────────────────
+android/tenpos-release.jks
+android/keystore.properties
+*.jks
+*.keystore
+KEYSTORE_CREDENTIALS.txt

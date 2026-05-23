@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+﻿import { useState, useMemo } from 'react'
 import { Download, Loader2, CalendarRange } from 'lucide-react'
 import { downloadXLSX } from '../../lib/xlsxExport'
 import { PageHeader } from '../../components/ui/PageHeader'
@@ -31,7 +31,7 @@ function periodLabel(period: Period, from: string, to: string): string {
   if (period === 'custom') {
     const f = new Date(from + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
     const t = new Date(to   + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
-    return `${f} – ${t}`
+    return `${f} â€" ${t}`
   }
   return { today: 'Today', week: 'Last 7 days', month: 'Last 30 days' }[period] ?? ''
 }
@@ -124,9 +124,9 @@ export function StaffReport() {
             ['Total Transactions', String(totalTxns)],
             ['Total Revenue',      fmt(totalRevenue)],
             ['Team Avg Order',     fmt(totalTxns > 0 ? totalRevenue / totalTxns : 0)],
-            ['Best Performer',     best?.name ?? '—'],
-            ['Best Revenue',       best ? fmt(best.revenue) : '—'],
-            ['Best Txns',          best ? String(best.transaction_count) : '—'],
+            ['Best Performer',     best?.name ?? 'â€"'],
+            ['Best Revenue',       best ? fmt(best.revenue) : 'â€"'],
+            ['Best Txns',          best ? String(best.transaction_count) : 'â€"'],
           ],
         },
       ],
@@ -184,15 +184,14 @@ export function StaffReport() {
       ) : (
         <>
           <div className="grid sm:grid-cols-3 gap-3 mb-5">
-            <StatCard label="Active Cashiers"    value={String(staff.length)} icon={Users} />
-            <StatCard label="Total Transactions" value={String(totalTxns)}   icon={ShoppingBag} iconColor="text-blue-600" iconBg="bg-blue-50" />
+            <StatCard label="Active Cashiers"    value={String(staff.length)} icon={Users}      iconColor="blue"    />
+            <StatCard label="Total Transactions" value={String(totalTxns)}   icon={ShoppingBag} iconColor="violet"  />
             <StatCard
               label="Best Performer"
               value={best?.name ?? '—'}
               subLabel={best ? fmt(best.revenue) : ''}
               icon={TrendingUp}
-              iconColor="text-green-600"
-              iconBg="bg-green-50"
+              iconColor="orange"
             />
           </div>
 
@@ -206,7 +205,7 @@ export function StaffReport() {
                     <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
                     <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} tickFormatter={(v) => v >= 1000 ? `₱${(v/1000).toFixed(0)}k` : `₱${v}`} width={44} />
                     <Tooltip formatter={(v) => [fmt(Number(v ?? 0)), 'Revenue']} contentStyle={{ borderRadius: 12, fontSize: 12 }} />
-                    <Bar dataKey="Revenue" fill="#C0392B" radius={[4, 4, 0, 0]} maxBarSize={56} />
+                    <Bar dataKey="Revenue" fill="#E5484D" radius={[4, 4, 0, 0]} maxBarSize={56} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -230,7 +229,7 @@ export function StaffReport() {
             <div className="px-4 py-3 border-b border-gray-50">
               <p className="text-sm font-semibold text-gray-800">
                 Detailed Breakdown
-                {cashierFilter !== 'All' && <span className="ml-2 text-xs text-brand font-medium">· {cashierFilter}</span>}
+                {cashierFilter !== 'All' && <span className="ml-2 text-xs text-brand font-medium">Â· {cashierFilter}</span>}
               </p>
             </div>
             <div className="overflow-x-auto">

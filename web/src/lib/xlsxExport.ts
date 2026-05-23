@@ -35,7 +35,7 @@ export interface ReportSheet {
 }
 
 // ─── Colours ─────────────────────────────────────────────────────────────────
-const CLR_BRAND   = 'C0392B'  // brand red (fill)
+const CLR_BRAND   = 'E5484D'  // brand red (fill)
 const CLR_HEADER  = 'F3F4F6'  // light gray
 const CLR_TOTALS  = 'FEF3C7'  // amber-100
 const CLR_STRIPE  = 'FAFAFA'  // near-white stripe

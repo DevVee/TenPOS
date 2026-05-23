@@ -9,7 +9,9 @@ import { supabase } from './supabase'
 
 // ─── Supabase session helpers (synchronous token read) ───────────────────────
 
-const PROJECT_REF  = 'einqluaxetbcuafxkwok'
+// Derive project ref from the env var — never hardcode it.
+const _supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string) ?? ''
+const PROJECT_REF  = _supabaseUrl.split('//')[1]?.split('.')[0] ?? ''
 const SESSION_KEY  = `sb-${PROJECT_REF}-auth-token`
 
 /**
@@ -173,12 +175,17 @@ export async function apiMe() {
   }
 }
 
-/** PIN verification — bcrypt comparison is server-only.
- *  TODO: create verify_staff_pin(pin text) RPC in Supabase.
- *  For now the PIN lock is purely a convenience re-auth (user is already
- *  authenticated), so we pass it through. */
-export async function apiVerifyPin(_pin: string) {
-  return { valid: true }
+/** PIN verification — calls the verify_staff_pin RPC (bcrypt server-side). */
+export async function apiVerifyPin(pin: string) {
+  const { data, error } = await supabase.rpc('verify_staff_pin', { p_pin: pin })
+  if (error) throw new Error(error.message)
+  return { valid: Boolean(data) }
+}
+
+/** Set / change the current staff member's device PIN (bcrypt server-side). */
+export async function apiSetDevicePin(pin: string) {
+  const { error } = await supabase.rpc('set_device_pin', { p_pin: pin })
+  if (error) throw new Error(error.message)
 }
 
 // ─── Profile ──────────────────────────────────────────────────────────────────
@@ -323,13 +330,27 @@ function mapProduct(p: SupabaseProduct) {
 
 const PRODUCT_SELECT = '*, categories(name), product_variants(*), stock_levels(stock, reorder_point)'
 
+/**
+ * Escape characters that are meaningful inside a PostgREST `.or()` filter string.
+ * Commas and parentheses would break the filter parser; percent/underscore are
+ * SQL LIKE wildcards that could widen or narrow results unexpectedly.
+ */
+function sanitizeSearchTerm(term: string): string {
+  return term
+    .replace(/%/g, '\\%')    // escape LIKE wildcard
+    .replace(/_/g, '\\_')    // escape LIKE single-char wildcard
+    .replace(/[(),]/g, '')   // strip PostgREST filter metacharacters
+    .trim()
+    .slice(0, 100)            // cap length to avoid runaway queries
+}
+
 export async function apiGetProducts(params?: Record<string, string>) {
   let q = supabase.from('products').select(PRODUCT_SELECT, { count: 'exact' })
   if (params?.active === 'true') q = q.eq('active', true)
   if (params?.category_id)       q = q.eq('category_id', params.category_id)
   if (params?.q) {
-    const term = params.q
-    q = q.or(`name.ilike.%${term}%,sku.ilike.%${term}%`)
+    const term = sanitizeSearchTerm(params.q)
+    if (term) q = q.or(`name.ilike.%${term}%,sku.ilike.%${term}%`)
   }
   const limit  = parseInt(params?.limit  ?? '100', 10)
   const offset = parseInt(params?.offset ?? '0',   10)
@@ -440,7 +461,11 @@ export async function apiUpdateProduct(id: string, data: Record<string, unknown>
   if (data.reorder_point !== undefined) stockCol.reorder_point = Number(data.reorder_point)
   if (data.stock         !== undefined) stockCol.stock         = Number(data.stock)
   if (Object.keys(stockCol).length) {
-    await supabase.from('stock_levels').update(stockCol).eq('product_id', id)
+    // Scope to the current staff's branch — never touch another branch's stock row
+    const staffForUpdate = await getCurrentStaff()
+    let stockQ = supabase.from('stock_levels').update(stockCol).eq('product_id', id)
+    if (staffForUpdate?.branch_id) stockQ = stockQ.eq('branch_id', staffForUpdate.branch_id)
+    await stockQ
   }
 
   void addAudit('PRODUCT_UPDATED', `Updated product: ${id}`, 'info')
@@ -592,26 +617,29 @@ export async function apiCreateTransaction(payload: {
   payments: { method: string; amount: number; reference?: string }[]
   discount: number
   voucher_code?: string
+  idempotency_key?: string
 }) {
   // ── SECURE PATH: delegate to create_transaction RPC ──────────────────────
   // The RPC re-validates prices, stock, branch, voucher, and payment totals
   // server-side — frontend values for unit_price are deliberately ignored.
+  // p_idempotency_key prevents duplicate submissions on retry.
   const { data, error } = await supabase.rpc('create_transaction', {
-    p_branch_id:    payload.branch_id,
-    p_items:        payload.items.map((i) => ({
+    p_branch_id:       payload.branch_id,
+    p_items:           payload.items.map((i) => ({
       product_id: i.product_id,
       variant_id: i.variant_id ?? null,
       quantity:   i.quantity,
       discount:   i.discount,
       note:       i.note ?? null,
     })),
-    p_payments:     payload.payments.map((p) => ({
+    p_payments:        payload.payments.map((p) => ({
       method:    p.method,
       amount:    p.amount,
       reference: p.reference ?? null,
     })),
-    p_discount:     payload.discount,
-    p_voucher_code: payload.voucher_code ?? null,
+    p_discount:        payload.discount,
+    p_voucher_code:    payload.voucher_code ?? null,
+    p_idempotency_key: payload.idempotency_key ?? null,
   })
 
   if (error) throw new Error(error.message)
@@ -636,14 +664,16 @@ export async function apiGetTransactions(params?: Record<string, string>) {
   if (params?.from)   q = q.gte('created_at', params.from)
   if (params?.to)     q = q.lte('created_at', params.to)
   if (params?.search) {
-    const s = params.search
-    // Also match cashier name: find all matching staff IDs first, then OR with receipt_no
-    const { data: matchingStaff } = await supabase.from('staff').select('id').ilike('name', `%${s}%`)
-    const staffIds = ((matchingStaff ?? []) as { id: string }[]).map((st) => st.id)
-    if (staffIds.length > 0) {
-      q = q.or(`receipt_no.ilike.%${s}%,staff_id.in.(${staffIds.join(',')})`)
-    } else {
-      q = q.ilike('receipt_no', `%${s}%`)
+    const s = sanitizeSearchTerm(params.search)
+    if (s) {
+      // Also match cashier name: find all matching staff IDs first, then OR with receipt_no
+      const { data: matchingStaff } = await supabase.from('staff').select('id').ilike('name', `%${s}%`)
+      const staffIds = ((matchingStaff ?? []) as { id: string }[]).map((st) => st.id)
+      if (staffIds.length > 0) {
+        q = q.or(`receipt_no.ilike.%${s}%,staff_id.in.(${staffIds.join(',')})`)
+      } else {
+        q = q.ilike('receipt_no', `%${s}%`)
+      }
     }
   }
 
@@ -726,61 +756,24 @@ export async function apiReturnTransaction(
   id: string,
   items: { item_id: string; quantity: number; reason?: string }[],
 ) {
-  const staff  = await getCurrentStaff()
-  const { data: tx, error: txErr } = await supabase
-    .from('transactions').select('branch_id, receipt_no').eq('id', id).single()
-  if (txErr || !tx) throw new Error('Transaction not found')
-  const txData = tx as { branch_id: string; receipt_no: string }
+  // ── SECURE PATH: delegate to process_return RPC ───────────────────────────
+  // The RPC validates manager/admin role, item ownership, quantities, and
+  // atomically restores stock in a single DB transaction — no race conditions.
+  const { data, error } = await supabase.rpc('process_return', {
+    p_transaction_id: id,
+    p_items:  items.map((i) => ({ item_id: i.item_id, quantity: i.quantity })),
+    p_reason: items[0]?.reason ?? '',
+  })
 
-  const itemIds = items.map((i) => i.item_id)
-  const { data: txItems } = await supabase
-    .from('transaction_items').select('id, product_id, variant_id, unit_price, quantity, product_name')
-    .in('id', itemIds)
-
-  const totalRefund = (txItems ?? []).reduce((sum, ti) => {
-    const ri = items.find((i) => i.item_id === (ti as { id: string }).id)
-    return sum + Number((ti as { unit_price: number }).unit_price) * (ri?.quantity ?? 0)
-  }, 0)
-
-  const { data: ret } = await supabase.from('returns').insert({
-    transaction_id: id, staff_id: staff?.id ?? null,
-    branch_id: txData.branch_id, reason: items[0]?.reason ?? null, total_refund: totalRefund,
-  }).select('id').single()
-
-  if (ret) {
-    await supabase.from('return_items').insert(
-      (txItems ?? []).map((ti) => {
-        const ri = items.find((i) => i.item_id === (ti as { id: string }).id)
-        return {
-          return_id: (ret as { id: string }).id,
-          transaction_item_id: (ti as { id: string }).id,
-          product_name: (ti as { product_name: string }).product_name,
-          quantity: ri?.quantity ?? 0,
-          refund_amount: Number((ti as { unit_price: number }).unit_price) * (ri?.quantity ?? 0),
-        }
-      }),
-    )
+  if (error) {
+    const msg = error.message
+    if (msg.includes('FORBIDDEN'))   throw new Error('Only managers and admins can process returns.')
+    if (msg.includes('NOT_FOUND'))   throw new Error('Transaction not found.')
+    if (msg.includes('INVALID'))     throw new Error(msg.split('INVALID: ')[1] ?? msg)
+    throw new Error(msg)
   }
 
-  await supabase.from('transactions').update({ status: 'refunded' }).eq('id', id)
-
-  // Restore stock — awaited so failures surface to the caller
-  for (const ti of (txItems ?? [])) {
-    const ri = items.find((i) => i.item_id === (ti as { id: string }).id)
-    if (!ri || !(ti as { product_id: string | null }).product_id) continue
-    const { data: level } = await supabase.from('stock_levels').select('id, stock')
-      .eq('product_id', (ti as { product_id: string }).product_id)
-      .eq('branch_id', txData.branch_id).maybeSingle()
-    if (level) {
-      const { error: stockErr } = await supabase.from('stock_levels')
-        .update({ stock: (level as { id: string; stock: number }).stock + ri.quantity })
-        .eq('id', (level as { id: string; stock: number }).id)
-      if (stockErr) throw new Error(`Return saved but stock restore failed: ${stockErr.message}`)
-    }
-  }
-
-  void addAudit('RETURN', `Return on ${txData.receipt_no} (${items.length} item(s))`, 'warning')
-  return { ok: true }
+  return { ok: true, ...(data as { return_id: string; refund_amount: number }) }
 }
 
 // ─── Vouchers ─────────────────────────────────────────────────────────────────
@@ -1106,7 +1099,7 @@ function mapStaff(u: SupabaseStaff, branchName = 'Main Branch') {
     id: u.id, name: u.name, email: u.email ?? '', role: u.role,
     branch: branchName, branch_id: u.branch_id,
     status: u.status as 'active' | 'inactive',
-    lastLogin: u.last_login ?? new Date(Date.now() - 86400000).toISOString(),
+    lastLogin: u.last_login ?? null,   // null means never logged in; don't fabricate a timestamp
     salesCount: u.sales_count, created_at: u.created_at,
   }
 }
@@ -1177,7 +1170,13 @@ export async function apiCreateStaff(data: Record<string, unknown>) {
       status:    'active',
     })
     .select('*').single()
-  if (error) throw new Error(error.message)
+
+  if (error) {
+    // The auth user was created but the staff row failed — sign out the
+    // orphaned account using the isolated client to prevent ghost users.
+    try { await _signupClient.auth.signOut() } catch { /* best effort */ }
+    throw new Error(`Auth account created but staff profile failed: ${error.message}. The auth user may need manual cleanup.`)
+  }
 
   void addAudit('STAFF_CREATED', `Created staff: ${(staff as SupabaseStaff).name} (${(staff as SupabaseStaff).role})`, 'info')
   return mapStaff(staff as SupabaseStaff)
@@ -1195,34 +1194,27 @@ export async function apiUpdateStaff(id: string, data: Record<string, unknown>) 
     .from('staff').update(col).eq('id', id).select('*').single()
   if (error) throw new Error(error.message)
 
-  // Password change — only possible when the staff member has a linked auth account
+  // Password changes require service-role privileges which the browser client
+  // does not have. Instruct the admin to use the Supabase dashboard instead.
   if (data.password) {
-    const authId = (staff as SupabaseStaff & { auth_id?: string | null }).auth_id
-    if (!authId) {
-      throw new Error(
-        'This staff member has no linked auth account. Profile saved, but password was not changed. ' +
-        'Create a new account to link credentials.',
-      )
-    }
-    const { error: passErr } = await supabase.auth.admin.updateUserById(authId, {
-      password: data.password as string,
-    })
-    if (passErr) {
-      throw new Error(
-        `Profile saved, but password update requires admin privileges: ${passErr.message}. ` +
-        'Use the Supabase dashboard to update the password directly.',
-      )
-    }
+    throw new Error(
+      'Profile saved successfully. ' +
+      'Password changes must be made in the Supabase dashboard: ' +
+      'Authentication → Users → select the user → Send reset email, ' +
+      'or set a new password directly.',
+    )
   }
 
   return mapStaff(staff as SupabaseStaff)
 }
 
 export async function apiDeleteStaff(id: string) {
+  // Soft-delete: deactivate the staff member rather than hard-deleting.
+  // This preserves historical transaction references and the audit trail.
   const { data: u } = await supabase.from('staff').select('name').eq('id', id).single()
-  const { error }   = await supabase.from('staff').delete().eq('id', id)
+  const { error }   = await supabase.from('staff').update({ status: 'inactive' }).eq('id', id)
   if (error) throw new Error(error.message)
-  void addAudit('STAFF_DELETED', `Deleted staff: ${(u as { name: string } | null)?.name ?? id}`, 'warning')
+  void addAudit('STAFF_DEACTIVATED', `Deactivated staff: ${(u as { name: string } | null)?.name ?? id}`, 'warning')
   return { ok: true }
 }
 
@@ -1341,41 +1333,49 @@ export async function apiCreateAdjustment(data: {
   product_id: string; type: 'in' | 'out' | 'correction' | 'damage' | 'return'
   quantity: number; reason: string; branch_id: string
 }) {
-  const staff = await getCurrentStaff()
+  // ── SECURE PATH: delegate to apply_stock_adjustment RPC ──────────────────
+  // The RPC atomically inserts the adjustment record AND updates stock in one
+  // DB transaction — eliminates the read-then-write race condition.
+  const { error } = await supabase.rpc('apply_stock_adjustment', {
+    p_product_id: data.product_id,
+    p_branch_id:  data.branch_id,
+    p_type:       data.type,
+    p_quantity:   data.quantity,
+    p_reason:     data.reason,
+  })
 
-  const { data: adj, error } = await supabase
-    .from('stock_adjustments')
-    .insert({
-      product_id: data.product_id, variant_id: null,
-      branch_id:  data.branch_id,  staff_id: staff?.id ?? null,
-      type: data.type, quantity: data.quantity, reason: data.reason,
-    })
-    .select('id, product_id, type, quantity, reason, branch_id, created_at, products(name, sku)')
-    .single()
-  if (error) throw new Error(error.message)
-
-  // Update stock — awaited so callers know whether it actually succeeded
-  const { data: level } = await supabase.from('stock_levels').select('id, stock')
-    .eq('product_id', data.product_id).eq('branch_id', data.branch_id).maybeSingle()
-  if (level) {
-    const { id: levelId, stock } = level as { id: string; stock: number }
-    let newStock = stock
-    if (data.type === 'in'  || data.type === 'return')  newStock = stock + data.quantity
-    if (data.type === 'out' || data.type === 'damage')  newStock = Math.max(0, stock - data.quantity)
-    if (data.type === 'correction')                     newStock = data.quantity
-    const { error: stockErr } = await supabase.from('stock_levels').update({ stock: newStock }).eq('id', levelId)
-    if (stockErr) throw new Error(`Adjustment saved but stock update failed: ${stockErr.message}`)
+  if (error) {
+    const msg = error.message
+    if (msg.includes('FORBIDDEN')) throw new Error('Only managers and admins can adjust stock.')
+    if (msg.includes('INVALID'))   throw new Error(msg.split('INVALID: ')[1] ?? msg)
+    throw new Error(msg)
   }
 
-  const adjRow = adj as unknown as { id: string; product_id: string; type: string; quantity: number; reason: string | null; branch_id: string; created_at: string; products: { name: string; sku: string } | null }
-  void addAudit('STOCK_ADJUSTMENT', `${data.type.toUpperCase()} ${data.quantity} × ${adjRow.products?.name ?? data.product_id}: ${data.reason}`, 'info')
+  // Re-fetch a fresh copy for the UI (the RPC returns only the adjustment_id)
+  const { data: rows } = await supabase
+    .from('stock_adjustments')
+    .select('id, product_id, type, quantity, reason, branch_id, created_at, products(name, sku), staff(name)')
+    .eq('product_id', data.product_id)
+    .eq('branch_id',  data.branch_id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+
+  const adj = rows?.[0] as unknown as {
+    id: string; product_id: string; type: string; quantity: number
+    reason: string | null; branch_id: string; created_at: string
+    products: { name: string; sku: string } | null
+    staff: { name: string } | null
+  } | undefined
 
   return {
-    id: adjRow.id, product_id: adjRow.product_id,
-    product_name: adjRow.products?.name ?? adjRow.product_id,
-    type: adjRow.type as 'in' | 'out' | 'correction' | 'damage' | 'return',
-    quantity: adjRow.quantity, reason: adjRow.reason ?? '',
-    by: staff?.name ?? 'System',
-    branch_id: adjRow.branch_id, created_at: adjRow.created_at,
+    id:           adj?.id           ?? '',
+    product_id:   adj?.product_id   ?? data.product_id,
+    product_name: adj?.products?.name ?? data.product_id,
+    type:         (adj?.type         ?? data.type) as 'in' | 'out' | 'correction' | 'damage' | 'return',
+    quantity:     adj?.quantity      ?? data.quantity,
+    reason:       adj?.reason        ?? data.reason,
+    by:           adj?.staff?.name   ?? 'Manager',
+    branch_id:    adj?.branch_id     ?? data.branch_id,
+    created_at:   adj?.created_at    ?? new Date().toISOString(),
   }
 }

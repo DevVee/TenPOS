@@ -1,5 +1,7 @@
+import { useState, useEffect } from 'react'
 import { useNavigate, useLocation, useParams } from 'react-router-dom'
-import { Printer, ShoppingCart, WifiOff } from 'lucide-react'
+import { Printer, ShoppingCart, WifiOff, Loader2, ArrowLeft } from 'lucide-react'
+import { db } from '../../lib/db'
 
 interface ReceiptItem {
   name: string
@@ -28,16 +30,72 @@ export function Receipt() {
   const navigate = useNavigate()
   const { id } = useParams()
   const location = useLocation()
-  const receipt = (location.state as { transaction?: ReceiptData } | null)?.transaction
+
+  // Prefer location.state (fastest path); fall back to Dexie on refresh/restart
+  const stateReceipt = (location.state as { transaction?: ReceiptData } | null)?.transaction
+  const [receipt, setReceipt] = useState<ReceiptData | null>(stateReceipt ?? null)
+  const [loading, setLoading] = useState(!stateReceipt && !!id)
+
+  // Inject @page style for thermal-printer-friendly output (80mm roll)
+  useEffect(() => {
+    const style = document.createElement('style')
+    style.id = 'receipt-print-style'
+    style.textContent = `
+      @media print {
+        @page { size: 80mm auto; margin: 4mm; }
+        body { background: white !important; }
+      }
+    `
+    document.head.appendChild(style)
+    return () => {
+      const el = document.getElementById('receipt-print-style')
+      if (el) el.remove()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (stateReceipt || !id) return
+    // Restore from Dexie cache when state was lost (refresh, back+forward, app restart)
+    db.transactions.get(id).then((txn) => {
+      if (txn) {
+        setReceipt({
+          receiptNo:      txn.receipt_no,
+          offline:        txn.is_offline,
+          items:          txn.items.map((i) => ({
+            name:     i.product_name,
+            qty:      i.quantity,
+            price:    i.unit_price,
+            discount: i.discount,
+            total:    i.total,
+          })),
+          subtotal:        txn.subtotal,
+          voucherDiscount: txn.discount,
+          total:           txn.total,
+          paid:            txn.payments[0]?.amount ?? txn.total,
+          change:          txn.change,
+          method:          txn.payment_method,
+        })
+      }
+    }).finally(() => setLoading(false))
+  }, [id, stateReceipt])
 
   const date = new Date().toLocaleDateString('en-PH', {
     year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
   })
 
+  if (loading) {
+    return (
+      <div className="max-w-sm mx-auto text-center py-16">
+        <Loader2 className="w-6 h-6 animate-spin text-brand mx-auto mb-3" />
+        <p className="text-gray-400 text-sm">Loading receipt…</p>
+      </div>
+    )
+  }
+
   if (!receipt) {
     return (
       <div className="max-w-sm mx-auto text-center py-16">
-        <p className="text-gray-400 text-sm mb-4">Receipt data not available.</p>
+        <p className="text-gray-400 text-sm mb-4">Receipt not found.</p>
         <button onClick={() => navigate('/pos')} className="btn-primary flex items-center justify-center gap-2 mx-auto px-6">
           <ShoppingCart className="w-4 h-4" /> New Sale
         </button>
@@ -47,19 +105,33 @@ export function Receipt() {
 
   return (
     <div className="max-w-sm mx-auto">
-      {/* Actions */}
-      <div className="flex gap-2 mb-4">
+      {/* Actions — hidden when printing */}
+      <div className="flex gap-2 mb-4 print:hidden">
+        <button
+          onClick={() => navigate(-1)}
+          className="btn-secondary flex items-center gap-1.5 justify-center px-3"
+          title="Go back"
+        >
+          <ArrowLeft className="w-4 h-4" />
+        </button>
         <button
           onClick={() => window.print()}
-          className="btn-secondary flex items-center gap-1.5 flex-1 justify-center"
+          className="btn-primary flex items-center gap-1.5 flex-1 justify-center"
         >
-          <Printer className="w-4 h-4" /> Print
+          <Printer className="w-4 h-4" /> Print Receipt
+        </button>
+        <button
+          onClick={() => navigate('/pos')}
+          className="btn-secondary flex items-center gap-1.5 justify-center px-3"
+          title="New sale"
+        >
+          <ShoppingCart className="w-4 h-4" />
         </button>
       </div>
 
-      {/* Offline badge */}
+      {/* Offline badge — hidden when printing */}
       {receipt.offline && (
-        <div className="flex items-center gap-2 bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2 mb-4 text-xs text-yellow-700 font-medium">
+        <div className="flex items-center gap-2 bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2 mb-4 text-xs text-yellow-700 font-medium print:hidden">
           <WifiOff className="w-3.5 h-3.5" />
           Saved offline — will sync when connected
         </div>
@@ -138,10 +210,10 @@ export function Receipt() {
         </div>
       </div>
 
-      {/* New sale */}
+      {/* New sale — hidden when printing */}
       <button
         onClick={() => navigate('/pos')}
-        className="btn-primary w-full flex items-center justify-center gap-2 py-3 mt-4"
+        className="btn-primary w-full flex items-center justify-center gap-2 py-3 mt-4 print:hidden"
       >
         <ShoppingCart className="w-4 h-4" /> New Sale
       </button>

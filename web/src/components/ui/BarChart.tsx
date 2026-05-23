@@ -1,4 +1,4 @@
-interface BarChartProps {
+﻿interface BarChartProps {
   data: Record<string, unknown>[]
   valueKey: string
   labelKey: string
@@ -7,7 +7,7 @@ interface BarChartProps {
   height?: number
 }
 
-export function BarChart({ data, valueKey, labelKey, color = '#C0392B', formatValue, height = 180 }: BarChartProps) {
+export function BarChart({ data, valueKey, labelKey, color = '#E5484D', formatValue, height = 180 }: BarChartProps) {
   const values = data.map((d) => Math.max(0, Number(d[valueKey]) || 0))
   const max = Math.max(...values, 1)
 

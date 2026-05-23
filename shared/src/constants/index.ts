@@ -7,13 +7,6 @@
 export const CURRENCY        = 'PHP'
 export const CURRENCY_SYMBOL = '₱'
 
-// ─── Tax ──────────────────────────────────────────────────────────────────────
-
-/** VAT rate as a percentage (e.g. 12 means 12%) */
-export const DEFAULT_VAT_RATE    = 12
-/** Multiplier to compute VAT-inclusive total (e.g. 1.12 for 12% VAT) */
-export const DEFAULT_VAT_MULTIPLIER = 1.12
-
 // ─── User roles ───────────────────────────────────────────────────────────────
 
 export const USER_ROLES = ['admin', 'manager', 'cashier', 'viewer'] as const

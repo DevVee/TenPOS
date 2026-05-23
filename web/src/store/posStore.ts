@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { CartItem, Product, ProductVariant, Payment } from '../types'
 import { submitTransaction } from '../lib/sync'
-import { calcSubtotal, calcTotal } from '@tenpos/shared'
+import { calcSubtotal } from '@tenpos/shared'
 
 interface TransactionResult {
   receipt_no: string
@@ -23,7 +23,6 @@ interface POSState {
   setSyncStatus: (s: POSState['syncStatus']) => void
 
   cartSubtotal: () => number
-  cartTotal: () => number
 
   // Submits the cart as a transaction — works offline
   checkoutCart: (
@@ -89,8 +88,6 @@ export const usePOSStore = create<POSState>((set, get) => ({
   setSyncStatus: (s) => set({ syncStatus: s }),
 
   cartSubtotal: () => calcSubtotal(get().cart),
-
-  cartTotal: () => calcTotal(get().cartSubtotal()),
 
   checkoutCart: async (branchId, payments, discountAmount, voucherCode) => {
     const { cart } = get()

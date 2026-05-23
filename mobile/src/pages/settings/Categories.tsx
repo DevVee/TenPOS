@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+﻿import { useState, useCallback } from 'react'
 import { Plus, Pencil, Trash2, Check, X, Loader2 } from 'lucide-react'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { Modal } from '../../components/ui/Modal'
@@ -81,7 +81,7 @@ export function Categories() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div>
       <PageHeader
         title="Product Categories"
         subtitle="Manage categories shown in the POS product grid"

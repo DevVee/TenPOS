@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, CreditCard, Banknote, Smartphone, Check, Tag, X, AlertCircle, Loader2 } from 'lucide-react'
 import { usePOSStore } from '../../store/posStore'

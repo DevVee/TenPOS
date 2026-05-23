@@ -59,7 +59,7 @@ export function Login() {
 
       {/* ── LEFT PANEL ──────────────────────────────────────────────────── */}
       <div className="hidden lg:flex lg:w-[42%] flex-col overflow-hidden relative"
-        style={{ background: 'linear-gradient(145deg, #C0392B 0%, #A93226 55%, #922B21 100%)' }}
+        style={{ background: 'linear-gradient(145deg, #E5484D 0%, #C93B40 55%, #B03338 100%)' }}
       >
         {/* Decorative blobs */}
         <div className="absolute -top-40 -right-40 w-96 h-96 rounded-full bg-white/[0.06] pointer-events-none" />
@@ -229,7 +229,7 @@ export function Login() {
                 </div>
               </div>
 
-              <button type="submit" disabled={loading} className="btn-primary w-full justify-center py-3.5 text-sm rounded-xl gap-2 mt-2">
+              <button type="submit" disabled={loading} className="btn-primary-lg w-full justify-center mt-2">
                 {loading
                   ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Signing in...</>
                   : <>Sign In <ArrowRight className="w-4 h-4" /></>}

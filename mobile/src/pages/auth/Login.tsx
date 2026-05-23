@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Eye, EyeOff, AlertCircle, ShoppingCart, Users, ArrowRight,
-  Zap, Package, Globe, Shield,
+  Zap, Package, Shield,
 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { apiLogin } from '../../lib/api'
@@ -12,12 +12,6 @@ const BAGS = [
   { src: '/products/butterfly-large.png',  label: 'Pagasa Large Butterfly' },
   { src: '/products/dino-medium.png',      label: 'Malakas Medium Dinosaur' },
   { src: '/products/hearts-large.png',     label: 'Pagasa Large Hearts' },
-]
-
-const DEMO_ACCOUNTS = [
-  { label: 'Admin',   username: 'admin',   pass: 'admin123',   role: 'Full system access' },
-  { label: 'Manager', username: 'manager', pass: 'manager123', role: 'Branch management' },
-  { label: 'Cashier', username: 'cashier', pass: 'cashier123', role: 'POS terminal only' },
 ]
 
 const FEATURES = [
@@ -34,7 +28,6 @@ export function Login() {
   const [showPass, setShowPass] = useState(false)
   const [error, setError]       = useState('')
   const [loading, setLoading]   = useState(false)
-  const [remember, setRemember] = useState(false)
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -153,15 +146,6 @@ export function Login() {
       {/* ── RIGHT PANEL ─────────────────────────────────────────────────── */}
       <div className="flex-1 bg-white flex flex-col overflow-y-auto">
 
-        {/* Language selector */}
-        <div className="flex justify-end px-8 pt-6">
-          <button className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 transition-colors">
-            <Globe className="w-3.5 h-3.5" />
-            English
-            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-          </button>
-        </div>
-
         {/* Centered form content */}
         <div className="flex-1 flex flex-col items-center justify-center px-8 py-8">
           <div className="w-full max-w-sm">
@@ -230,22 +214,6 @@ export function Login() {
                 </div>
               </div>
 
-              {/* Remember me + Forgot */}
-              <div className="flex items-center justify-between">
-                <label className="flex items-center gap-2 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={remember}
-                    onChange={(e) => setRemember(e.target.checked)}
-                    className="w-4 h-4 rounded border-gray-300 text-brand accent-brand cursor-pointer"
-                  />
-                  <span className="text-sm text-gray-600">Remember me</span>
-                </label>
-                <button type="button" className="text-sm text-brand font-semibold hover:underline">
-                  Forgot password?
-                </button>
-              </div>
-
               <button
                 type="submit"
                 disabled={loading}
@@ -263,31 +231,6 @@ export function Login() {
               Need access?{' '}
               <span className="text-gray-600 font-medium">Contact your system administrator.</span>
             </p>
-
-            {/* Demo accounts */}
-            <div className="mt-5">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="flex-1 h-px bg-gray-100" />
-                <span className="text-xs text-gray-400">demo accounts</span>
-                <div className="flex-1 h-px bg-gray-100" />
-              </div>
-              <div className="space-y-2">
-                {DEMO_ACCOUNTS.map((a) => (
-                  <button
-                    key={a.label}
-                    type="button"
-                    onClick={() => { setUsername(a.username); setPassword(a.pass); setError('') }}
-                    className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border border-gray-100 hover:border-brand/30 hover:bg-brand-pale transition-all group text-left"
-                  >
-                    <div>
-                      <p className="text-sm font-bold text-gray-700 group-hover:text-brand transition-colors leading-none mb-0.5">{a.label}</p>
-                      <p className="text-[11px] text-gray-400">{a.role}</p>
-                    </div>
-                    <ArrowRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-brand transition-colors" />
-                  </button>
-                ))}
-              </div>
-            </div>
           </div>
         </div>
 

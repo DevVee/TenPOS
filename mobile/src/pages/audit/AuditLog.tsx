@@ -1,9 +1,10 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { Search, Download, Shield, Loader2 } from 'lucide-react'
 import { Badge } from '../../components/ui/Badge'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { apiGetAuditLog } from '../../lib/api'
 import { useApiData } from '../../hooks/useApiData'
+import { downloadXLSX } from '../../lib/xlsxExport'
 
 interface AuditEntry {
   id: string
@@ -37,6 +38,25 @@ export function AuditLog() {
 
   const entries = data?.data ?? []
 
+  const handleExport = () => {
+    downloadXLSX(
+      `TenPOS-Audit-Log-${new Date().toISOString().slice(0, 10)}`,
+      [{
+        name: 'Audit Log',
+        columns: [
+          { header: 'Severity',  width: 12 },
+          { header: 'Action',    width: 32 },
+          { header: 'User',      width: 22 },
+          { header: 'Details',   width: 44 },
+          { header: 'IP Address',width: 16 },
+          { header: 'Timestamp', type: 'date', width: 22 },
+        ],
+        rows: filtered.map((a) => [a.severity, a.action, a.user, a.details, a.ip, a.timestamp]),
+      }],
+      'Audit Log'
+    )
+  }
+
   const filtered = entries.filter((a) => {
     if (!search) return true
     const q = search.toLowerCase()
@@ -53,7 +73,7 @@ export function AuditLog() {
         title="Audit Log"
         subtitle="Immutable record of all system actions"
         actions={
-          <button className="btn-secondary flex items-center gap-1.5"><Download className="w-4 h-4" /> Export Log</button>
+          <button onClick={handleExport} className="btn-secondary flex items-center gap-1.5"><Download className="w-4 h-4" /> Export Log</button>
         }
       />
 

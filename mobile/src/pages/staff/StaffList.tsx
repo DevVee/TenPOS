@@ -1,10 +1,11 @@
-import { useState } from 'react'
+﻿import { useState, useEffect } from 'react'
 import { Search, Plus, UserCheck, UserX, Loader2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Badge } from '../../components/ui/Badge'
 import { PageHeader } from '../../components/ui/PageHeader'
 import type { UserRole } from '../../types'
 import { apiGetStaff } from '../../lib/api'
+import { supabase } from '../../lib/supabase'
 import { useApiData } from '../../hooks/useApiData'
 
 interface StaffMember {
@@ -28,10 +29,25 @@ export function StaffList() {
   const navigate = useNavigate()
   const [search,     setSearch]     = useState('')
   const [roleFilter, setRoleFilter] = useState<string>('all')
+  const [tick,       setTick]       = useState(0)
 
   const { data, loading, error } = useApiData<{ data: StaffMember[]; total: number }>(
-    () => apiGetStaff({ limit: '100' }) as Promise<{ data: StaffMember[]; total: number }>
+    () => apiGetStaff({ limit: '100' }) as Promise<{ data: StaffMember[]; total: number }>,
+    [tick],
   )
+
+  // ── Realtime: refresh when staff rows change ─────────────────────────────────
+  useEffect(() => {
+    const channel = supabase
+      .channel('staff-list-rt')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'staff' },
+        () => setTick((t) => t + 1),
+      )
+      .subscribe()
+    return () => { void supabase.removeChannel(channel) }
+  }, [])
 
   const staff       = data?.data ?? []
   const activeCount = staff.filter((s) => s.status === 'active').length

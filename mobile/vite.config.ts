@@ -3,6 +3,8 @@ import react from '@vitejs/plugin-react'
 import path from 'path'
 
 export default defineConfig({
+  // Capacitor requires relative asset paths inside Android assets/
+  base: './',
   plugins: [react()],
   resolve: {
     alias: {

@@ -6,8 +6,6 @@
 import type { CartItem } from '../types/index.js'
 import {
   CURRENCY_SYMBOL,
-  DEFAULT_VAT_MULTIPLIER,
-  DEFAULT_VAT_RATE,
   SYNC_LOG_LIMIT,
   STORAGE_KEYS,
 } from '../constants/index.js'
@@ -46,22 +44,14 @@ export function calcSubtotal(cart: CartItem[]): number {
 }
 
 /**
- * Calculate VAT amount from a subtotal.
- * vatRate is a percentage (e.g. 12 for 12%).
- */
-export function calcTax(subtotal: number, vatRate: number = DEFAULT_VAT_RATE): number {
-  return subtotal * (vatRate / 100)
-}
-
-/**
- * Calculate VAT-inclusive total after applying a cart-level discount.
+ * Calculate the order total after applying a cart-level discount.
+ * No VAT — tax is always 0.
  */
 export function calcTotal(
   subtotal: number,
-  discountAmount: number = 0,
-  vatMultiplier: number = DEFAULT_VAT_MULTIPLIER
+  discountAmount: number = 0
 ): number {
-  return (subtotal - discountAmount) * vatMultiplier
+  return Math.max(0, subtotal - discountAmount)
 }
 
 /**

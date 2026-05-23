@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { Download, Printer, Loader2, TrendingUp, TrendingDown, DollarSign, ShoppingBag } from 'lucide-react'
 import { downloadXLSX } from '../../lib/xlsxExport'
 import { PageHeader } from '../../components/ui/PageHeader'
@@ -39,7 +39,7 @@ export function FinancialReport() {
   const isSingleDay = dateFrom === dateTo
   const periodLabel = isSingleDay
     ? new Date(dateFrom + 'T00:00:00').toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
-    : `${new Date(dateFrom + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })} – ${new Date(dateTo + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}`
+    : `${new Date(dateFrom + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })} â€“ ${new Date(dateTo + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}`
 
   const COLOR: Record<string, string> = {
     cash: 'bg-green-500', gcash: 'bg-blue-500', card: 'bg-gray-400', paymaya: 'bg-purple-500',
@@ -67,8 +67,8 @@ export function FinancialReport() {
           ],
           rows: [
             ['Revenue',           d?.revenue ?? 0,       'Total sales (completed transactions)'],
-            ['Cost of Goods',     -(d?.cogs ?? 0),       'Cost price × units sold'],
-            ['Gross Profit',      d?.gross_profit ?? 0,  'Revenue − COGS'],
+            ['Cost of Goods',     -(d?.cogs ?? 0),       'Cost price Ã— units sold'],
+            ['Gross Profit',      d?.gross_profit ?? 0,  'Revenue âˆ’ COGS'],
             ['Gross Margin %',    Number(d?.gross_margin ?? 0), ''],
             ['Stock Value',       d?.stock_value ?? 0,   'Current inventory at cost'],
             ['Transactions',      d?.transaction_count ?? 0, 'Number of completed sales'],
@@ -105,7 +105,7 @@ export function FinancialReport() {
     <div>
       <PageHeader
         title="Financial Report"
-        subtitle={`P&L and payment breakdown · ${periodLabel}`}
+        subtitle={`P&L and payment breakdown Â· ${periodLabel}`}
         actions={
           <div className="flex flex-wrap gap-2 items-center">
             {/* Date range */}
@@ -161,10 +161,10 @@ export function FinancialReport() {
       ) : (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-            <StatCard label="Revenue"      value={fmt(data?.revenue ?? 0)}      icon={DollarSign} />
-            <StatCard label="Gross Profit" value={fmt(data?.gross_profit ?? 0)} icon={TrendingUp} iconColor="text-green-600" iconBg="bg-green-50" />
-            <StatCard label="Gross Margin" value={`${data?.gross_margin ?? '0'}%`} icon={TrendingUp} iconColor="text-blue-600" iconBg="bg-blue-50" />
-            <StatCard label="Transactions" value={String(data?.transaction_count ?? 0)} icon={ShoppingBag} iconColor="text-purple-600" iconBg="bg-purple-50" />
+            <StatCard label="Revenue"      value={fmt(data?.revenue ?? 0)}                    icon={DollarSign}  iconColor="emerald" />
+            <StatCard label="Gross Profit" value={fmt(data?.gross_profit ?? 0)}               icon={TrendingUp}  iconColor="blue"    />
+            <StatCard label="Gross Margin" value={`${data?.gross_margin ?? '0'}%`}             icon={TrendingUp}  iconColor="violet"  />
+            <StatCard label="Transactions" value={String(data?.transaction_count ?? 0)}        icon={ShoppingBag} iconColor="orange"  />
           </div>
 
           {/* P&L Summary */}

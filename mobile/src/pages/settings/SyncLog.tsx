@@ -19,9 +19,10 @@ function timeAgo(ts: number) {
 }
 
 const TYPE_CONFIG: Record<SyncLogEntry['type'], { icon: React.ElementType; label: string; dot: string; badge: string }> = {
-  transaction: { icon: ShoppingCart, label: 'Transaction',   dot: 'bg-brand',    badge: 'bg-brand/10 text-brand' },
-  cache:       { icon: Database,     label: 'Cache Refresh', dot: 'bg-blue-400', badge: 'bg-blue-50 text-blue-600' },
-  failed:      { icon: XCircle,      label: 'Failed',        dot: 'bg-red-400',  badge: 'bg-red-50 text-red-600' },
+  transaction: { icon: ShoppingCart, label: 'Transaction',   dot: 'bg-brand',      badge: 'bg-brand/10 text-brand'   },
+  cache:       { icon: Database,     label: 'Cache Refresh', dot: 'bg-blue-400',   badge: 'bg-blue-50 text-blue-600' },
+  failed:      { icon: XCircle,      label: 'Failed',        dot: 'bg-red-400',    badge: 'bg-red-50 text-red-600'   },
+  info:        { icon: RefreshCw,    label: 'Info',          dot: 'bg-gray-300',   badge: 'bg-gray-50 text-gray-500' },
 }
 
 export function SyncLog() {

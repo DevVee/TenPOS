@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, UserX, UserCheck, Check, X, Loader2, Pencil } from 'lucide-react'
 import { Badge } from '../../components/ui/Badge'
@@ -39,7 +39,7 @@ const ROLE_PERMISSIONS: Record<string, [string, boolean][]> = {
     ['Manage inventory', true], ['Void transactions', true], ['Access settings', false],
   ],
   cashier: [
-    ['Process sales', true], ['View own shift', true], ['Issue receipts', true],
+    ['Process sales', true], ['View own sales', true], ['Issue receipts', true],
     ['Apply pre-set discounts', true], ['Access analytics', false], ['Void transactions', false],
   ],
   viewer: [
@@ -69,7 +69,7 @@ export function StaffDetail() {
 
   if (error || !staff) {
     return (
-      <div className="max-w-2xl mx-auto">
+      <div>
         <button onClick={() => navigate('/staff')} className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-4">
           <ArrowLeft className="w-4 h-4" /> Back to Staff
         </button>
@@ -109,7 +109,7 @@ export function StaffDetail() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div>
       <div className="flex items-center justify-between mb-5">
         <div className="flex items-center gap-3">
           <button onClick={() => navigate('/staff')} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500">

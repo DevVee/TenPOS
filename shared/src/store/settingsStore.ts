@@ -7,7 +7,6 @@
 import { create } from 'zustand'
 import type { Category, Voucher } from '../types/index.js'
 import {
-  DEFAULT_VAT_RATE,
   CURRENCY,
   CURRENCY_SYMBOL,
   DEFAULT_LOW_STOCK_THRESHOLD,
@@ -38,11 +37,9 @@ interface SettingsState {
   // Sync
   autoSyncInterval: number   // seconds
 
-  // Currency & tax
+  // Currency (VAT removed — tax is always 0)
   currency: string
   currencySymbol: string
-  vatRate: number            // as percent e.g. 12
-  vatEnabled: boolean
 
   // Format
   dateFormat: 'MM/DD/YYYY' | 'DD/MM/YYYY' | 'YYYY-MM-DD'
@@ -125,11 +122,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   // Sync
   autoSyncInterval: 30,
 
-  // Currency & tax
+  // Currency (VAT removed)
   currency:       CURRENCY,
   currencySymbol: CURRENCY_SYMBOL,
-  vatRate:        DEFAULT_VAT_RATE,
-  vatEnabled:     true,
 
   // Format
   dateFormat: 'MM/DD/YYYY',

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Search, Filter, Download, Loader2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Search, Download, Loader2, ChevronLeft, ChevronRight, WifiOff, Calendar, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Badge } from '../../components/ui/Badge'
 import { PageHeader } from '../../components/ui/PageHeader'
@@ -17,19 +17,53 @@ interface Transaction {
   total: number
   payment_method: string
   status: string
+  is_offline?: boolean
+  synced?: boolean
 }
 
 const PAGE_SIZE = 20
 
+function exportToCSV(transactions: Transaction[]) {
+  const headers = ['Receipt #', 'Date', 'Cashier', 'Items', 'Payment', 'Total', 'Status']
+  const rows = transactions.map((t) => [
+    t.receipt_no,
+    new Date(t.created_at).toLocaleString('en-PH'),
+    t.staff_name,
+    String((t.items as unknown[]).length),
+    t.payment_method,
+    String(Number(t.total).toFixed(2)),
+    t.status,
+  ])
+  const csv = [headers, ...rows]
+    .map((row) => row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(','))
+    .join('\n')
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `transactions-${new Date().toISOString().slice(0, 10)}.csv`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
 export function TransactionList() {
   const navigate = useNavigate()
-  const [search, setSearch] = useState('')
+  const [search, setSearch]           = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
-  const [page, setPage] = useState(1)
+  const [page, setPage]               = useState(1)
   const [transactions, setTransactions] = useState<Transaction[]>([])
-  const [total, setTotal] = useState(0)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const [total, setTotal]             = useState(0)
+  const [loading, setLoading]         = useState(true)
+  const [error, setError]             = useState('')
+
+  // Date range filter
+  const today = new Date().toISOString().slice(0, 10)
+  const [showDateFilter, setShowDateFilter] = useState(false)
+  const [dateFrom, setDateFrom]   = useState('')
+  const [dateTo, setDateTo]       = useState('')
+  const hasDateFilter = dateFrom || dateTo
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -42,6 +76,8 @@ export function TransactionList() {
       }
       if (statusFilter !== 'all') params.status = statusFilter
       if (search.trim()) params.search = search.trim()
+      if (dateFrom) params.from = dateFrom + 'T00:00:00'
+      if (dateTo)   params.to   = dateTo   + 'T23:59:59'
 
       const res = await apiGetTransactions(params) as { data: Transaction[]; total: number }
       setTransactions(res.data ?? [])
@@ -51,11 +87,13 @@ export function TransactionList() {
     } finally {
       setLoading(false)
     }
-  }, [search, statusFilter, page])
+  }, [search, statusFilter, page, dateFrom, dateTo])
 
   useEffect(() => { load() }, [load])
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+
+  const clearDates = () => { setDateFrom(''); setDateTo(''); setShowDateFilter(false); setPage(1) }
 
   const paymentBadge = (method: string): 'green' | 'blue' | 'gray' | 'yellow' => {
     const m = method?.toLowerCase()
@@ -71,13 +109,18 @@ export function TransactionList() {
         title="Transactions"
         subtitle="All sales, voids, and returns"
         actions={
-          <button className="btn-secondary flex items-center gap-1.5">
-            <Download className="w-4 h-4" /> Export
+          <button
+            onClick={() => exportToCSV(transactions)}
+            disabled={transactions.length === 0}
+            className="btn-secondary flex items-center gap-1.5 disabled:opacity-40"
+          >
+            <Download className="w-4 h-4" /> Export CSV
           </button>
         }
       />
 
-      <div className="flex flex-wrap items-center gap-3 mb-4">
+      {/* Filters row */}
+      <div className="flex flex-wrap items-center gap-3 mb-3">
         <div className="relative flex-1 min-w-48">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
@@ -102,10 +145,68 @@ export function TransactionList() {
             </button>
           ))}
         </div>
-        <button className="btn-secondary flex items-center gap-1.5">
-          <Filter className="w-4 h-4" /> Date Range
+        <button
+          onClick={() => setShowDateFilter((v) => !v)}
+          className={`btn-secondary flex items-center gap-1.5 ${hasDateFilter ? 'border-brand text-brand bg-brand/5' : ''}`}
+        >
+          <Calendar className="w-4 h-4" />
+          {hasDateFilter ? `${dateFrom || '…'} → ${dateTo || '…'}` : 'Date Range'}
+          {hasDateFilter && (
+            <span
+              onClick={(e) => { e.stopPropagation(); clearDates() }}
+              className="ml-1 text-gray-400 hover:text-red-500"
+            >
+              <X className="w-3 h-3" />
+            </span>
+          )}
         </button>
       </div>
+
+      {/* Date range picker */}
+      {showDateFilter && (
+        <div className="card p-4 mb-3 flex flex-wrap items-end gap-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">From</label>
+            <input
+              type="date"
+              max={dateTo || today}
+              className="input-base w-44"
+              value={dateFrom}
+              onChange={(e) => { setDateFrom(e.target.value); setPage(1) }}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">To</label>
+            <input
+              type="date"
+              min={dateFrom}
+              max={today}
+              className="input-base w-44"
+              value={dateTo}
+              onChange={(e) => { setDateTo(e.target.value); setPage(1) }}
+            />
+          </div>
+          <div className="flex gap-2">
+            {/* Quick presets */}
+            {[
+              { label: 'Today',     fn: () => { setDateFrom(today); setDateTo(today) } },
+              { label: 'This week', fn: () => { const d = new Date(); d.setDate(d.getDate() - 6); setDateFrom(d.toISOString().slice(0, 10)); setDateTo(today) } },
+              { label: 'This month',fn: () => { const d = new Date(); d.setDate(1); setDateFrom(d.toISOString().slice(0, 10)); setDateTo(today) } },
+            ].map((p) => (
+              <button
+                key={p.label}
+                onClick={() => { p.fn(); setPage(1) }}
+                className="px-3 py-2 text-xs font-medium bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-600 transition-colors"
+              >
+                {p.label}
+              </button>
+            ))}
+            <button onClick={clearDates} className="px-3 py-2 text-xs font-medium text-gray-400 hover:text-red-500 transition-colors">
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="card p-4 mb-4 text-sm text-red-600 bg-red-50 border-red-100">{error}</div>
@@ -143,7 +244,14 @@ export function TransactionList() {
                         className="table-row cursor-pointer"
                         onClick={() => navigate(`/transactions/${t.id}`)}
                       >
-                        <td className="px-4 py-3 text-sm font-medium text-gray-700">{t.receipt_no}</td>
+                        <td className="px-4 py-3">
+                          <p className="text-sm font-medium text-gray-700">{t.receipt_no}</p>
+                          {t.is_offline && !t.synced && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-1.5 py-0.5 mt-0.5">
+                              <WifiOff className="w-2.5 h-2.5" /> Pending sync
+                            </span>
+                          )}
+                        </td>
                         <td className="px-4 py-3">
                           <p className="text-sm text-gray-700">{new Date(t.created_at).toLocaleDateString('en-PH')}</p>
                           <p className="text-xs text-gray-400">{new Date(t.created_at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}</p>

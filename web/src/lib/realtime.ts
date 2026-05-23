@@ -4,6 +4,12 @@
  * Requires Migration 005 to have been run (ALTER PUBLICATION … ADD TABLE).
  * If Realtime is not enabled in the Supabase dashboard for a table,
  * the callback simply never fires — no error, no crash.
+ *
+ * FIX: each subscribe* function now captures the channel reference in a
+ * local variable before the closure is built.  This prevents the stale-closure
+ * bug where a subsequent subscribe call would overwrite the module-level
+ * variable before the previous cleanup ran, causing the new channel to be
+ * accidentally unsubscribed.
  */
 
 import { supabase } from './supabase'
@@ -19,11 +25,20 @@ let productChannel: RealtimeChannel | null = null
 
 export function subscribeProducts(onchange: Handler): () => void {
   productChannel?.unsubscribe()
-  productChannel = supabase
+
+  // Capture in a local variable so the cleanup closure always refers to THIS
+  // specific channel instance, even if subscribeProducts is called again.
+  const channel = supabase
     .channel('realtime:products')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, onchange)
     .subscribe()
-  return () => { productChannel?.unsubscribe(); productChannel = null }
+
+  productChannel = channel
+
+  return () => {
+    channel.unsubscribe()
+    if (productChannel === channel) productChannel = null
+  }
 }
 
 // ─── Transactions channel ─────────────────────────────────────────────────────
@@ -34,11 +49,18 @@ let txChannel: RealtimeChannel | null = null
 
 export function subscribeTransactions(onchange: Handler): () => void {
   txChannel?.unsubscribe()
-  txChannel = supabase
+
+  const channel = supabase
     .channel('realtime:transactions')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, onchange)
     .subscribe()
-  return () => { txChannel?.unsubscribe(); txChannel = null }
+
+  txChannel = channel
+
+  return () => {
+    channel.unsubscribe()
+    if (txChannel === channel) txChannel = null
+  }
 }
 
 // ─── Stock levels channel ─────────────────────────────────────────────────────
@@ -48,9 +70,16 @@ let stockChannel: RealtimeChannel | null = null
 
 export function subscribeStock(onchange: Handler): () => void {
   stockChannel?.unsubscribe()
-  stockChannel = supabase
+
+  const channel = supabase
     .channel('realtime:stock_levels')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_levels' }, onchange)
     .subscribe()
-  return () => { stockChannel?.unsubscribe(); stockChannel = null }
+
+  stockChannel = channel
+
+  return () => {
+    channel.unsubscribe()
+    if (stockChannel === channel) stockChannel = null
+  }
 }

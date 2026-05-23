@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+﻿import { useState, useCallback } from 'react'
 import { Plus, Pencil, Trash2, Tag, Calendar, Users, Loader2, AlertCircle } from 'lucide-react'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { Modal } from '../../components/ui/Modal'
@@ -111,7 +111,7 @@ export function Vouchers() {
   const isExpired = (expiry: string) => new Date(expiry) < new Date()
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div>
       <PageHeader
         title="Vouchers & Promo Codes"
         subtitle="Manage discount codes that cashiers can apply at checkout"

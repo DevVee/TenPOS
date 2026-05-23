@@ -71,10 +71,10 @@ export function ShiftSummary() {
       ) : (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-            <StatCard label="Total Sales"   value={fmt(totalSales)}          icon={DollarSign} />
-            <StatCard label="Transactions"  value={String(completed.length)} icon={ShoppingBag} />
-            <StatCard label="Avg. Value"    value={fmt(avgValue)}            icon={TrendingUp} iconColor="text-blue-600" iconBg="bg-blue-50" />
-            <StatCard label="Shift Duration" value={shiftHours}              icon={Clock}      iconColor="text-green-600" iconBg="bg-green-50" />
+            <StatCard label="Total Sales"    value={fmt(totalSales)}          icon={DollarSign}  iconColor="emerald" />
+            <StatCard label="Transactions"   value={String(completed.length)} icon={ShoppingBag} iconColor="blue"    />
+            <StatCard label="Avg. Value"     value={fmt(avgValue)}            icon={TrendingUp}  iconColor="violet"  />
+            <StatCard label="Shift Duration" value={shiftHours}               icon={Clock}       iconColor="gray"    />
           </div>
 
           <div className="grid sm:grid-cols-2 gap-4 mb-5">

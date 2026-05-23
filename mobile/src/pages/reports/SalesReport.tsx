@@ -1,8 +1,9 @@
-import { useState } from 'react'
-import { Download, TrendingUp, Loader2 } from 'lucide-react'
+﻿import { useState, useMemo } from 'react'
+import { Download, TrendingUp, Loader2, CalendarRange, DollarSign, ShoppingBag } from 'lucide-react'
+import { downloadXLSX } from '../../lib/xlsxExport'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatCard } from '../../components/ui/StatCard'
-import { DollarSign, ShoppingBag } from 'lucide-react'
+import { EmptyState } from '../../components/ui/EmptyState'
 import { apiSalesReport } from '../../lib/api'
 import { useApiData } from '../../hooks/useApiData'
 import {
@@ -10,7 +11,7 @@ import {
   Tooltip, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area,
 } from 'recharts'
 
-type Period = 'today' | 'week' | 'month' | 'year'
+type Period = 'today' | 'week' | 'month' | 'year' | 'custom'
 
 function fmt(n: number) { return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2 })}` }
 function fmtShort(n: number) { return n >= 1000 ? `₱${(n / 1000).toFixed(1)}k` : `₱${n.toFixed(0)}` }
@@ -23,151 +24,292 @@ interface SalesData {
   hourlyHeatmap?: { hour: number; revenue: number; count: number }[]
 }
 
-function periodDates(p: Period): Record<string, string> {
-  const today = new Date().toISOString().slice(0, 10)
+function isoDate(d: Date) { return d.toISOString().slice(0, 10) }
+
+function presetDates(p: Exclude<Period, 'custom'>): { from: string; to: string } {
+  const today = isoDate(new Date())
   const daysBack = { today: 0, week: 7, month: 30, year: 365 }[p]
   if (daysBack === 0) return { from: today + 'T00:00:00', to: today + 'T23:59:59' }
-  const from = new Date(Date.now() - daysBack * 86400000).toISOString().slice(0, 10)
+  const from = isoDate(new Date(Date.now() - daysBack * 86400000))
   return { from: from + 'T00:00:00', to: today + 'T23:59:59' }
 }
 
-const BRAND   = '#C0392B'
-const PALETTE = ['#C0392B', '#E67E22', '#2980B9', '#27AE60', '#8E44AD', '#16A085']
+function periodLabel(period: Period, customFrom: string, customTo: string): string {
+  if (period === 'custom') {
+    const f = new Date(customFrom + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
+    const t = new Date(customTo   + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
+    return `${f} – ${t}`
+  }
+  return { today: 'Today', week: 'Last 7 days', month: 'Last 30 days', year: 'Last 365 days' }[period] ?? ''
+}
 
-function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: { value: number; name: string }[]; label?: string }) {
+const BRAND   = '#E5484D'
+const PALETTE = ['#E5484D', '#F59E0B', '#3B82F6', '#10B981', '#8B5CF6', '#06B6D4']
+
+function ChartTooltip({ active, payload, label }: {
+  active?: boolean; payload?: { value: number; name: string }[]; label?: string
+}) {
   if (!active || !payload?.length) return null
   return (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-lg px-3 py-2.5 text-xs">
-      <p className="font-semibold text-gray-600 mb-1">{label}</p>
+    <div className="bg-white border border-gray-200 rounded-lg shadow-panel px-3 py-2.5 text-xs">
+      <p className="text-gray-400 mb-1">{label}</p>
       {payload.map((p) => (
-        <p key={p.name} className="font-bold" style={{ color: BRAND }}>{fmt(p.value)}</p>
+        <p key={p.name} className="font-semibold text-gray-900">{fmt(p.value)}</p>
       ))}
     </div>
   )
 }
 
+const PERIOD_LABELS: Record<Period, string> = {
+  today: 'Today', week: '7d', month: '30d', year: '1y', custom: 'Custom',
+}
+
 export function SalesReport() {
-  const [period, setPeriod] = useState<Period>('week')
+  const [period, setPeriod]         = useState<Period>('week')
+  const [customFrom, setCustomFrom] = useState(isoDate(new Date(Date.now() - 7 * 86400000)))
+  const [customTo, setCustomTo]     = useState(isoDate(new Date()))
+  const [category, setCategory]     = useState('All')
+
+  const queryDates = useMemo(() => {
+    if (period === 'custom') return { from: customFrom + 'T00:00:00', to: customTo + 'T23:59:59' }
+    return presetDates(period)
+  }, [period, customFrom, customTo])
 
   const { data, loading } = useApiData<SalesData>(
-    () => apiSalesReport(periodDates(period)) as Promise<SalesData>,
-    [period]
+    () => apiSalesReport(queryDates) as Promise<SalesData>,
+    [queryDates]
   )
 
-  const summary     = data?.summary
+  const summary      = data?.summary
   const totalRevenue = summary ? Number(summary.total_revenue) : 0
-  const totalTxns   = summary ? Number(summary.transaction_count) : 0
+  const totalTxns    = summary ? Number(summary.transaction_count) : 0
 
   const dailyData = (data?.salesByPeriod ?? []).map((p) => ({
-    date: new Date(p.date + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }),
+    date:    new Date(p.date + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }),
     Revenue: Number(p.revenue),
-    Orders: Number(p.count),
+    Orders:  Number(p.count),
   }))
 
   const hourlyData = (data?.hourlyHeatmap ?? []).map((h) => ({
-    hour: `${String(h.hour).padStart(2, '0')}:00`,
+    hour:    `${String(h.hour).padStart(2, '0')}:00`,
     Revenue: Number(h.revenue),
-    Orders: Number(h.count),
+    Orders:  Number(h.count),
   }))
 
-  const topProducts = data?.topProducts ?? []
+  const allProducts = data?.topProducts ?? []
+  const categories = useMemo(
+    () => ['All', ...[...new Set(allProducts.map((p) => p.category_name ?? 'Uncategorized').filter(Boolean))].sort()],
+    [allProducts]
+  )
+  const topProducts = useMemo(
+    () => category === 'All' ? allProducts : allProducts.filter((p) => (p.category_name ?? 'Uncategorized') === category),
+    [allProducts, category]
+  )
 
   const paymentData = (data?.byPaymentMethod ?? []).map((m) => ({
-    name: m.method.charAt(0).toUpperCase() + m.method.slice(1),
+    name:  m.method.charAt(0).toUpperCase() + m.method.slice(1),
     value: Number(m.total),
     count: Number(m.count),
   }))
+
+  const handleExport = () => {
+    const label    = periodLabel(period, customFrom, customTo)
+    const today    = isoDate(new Date())
+    const allProds = data?.topProducts ?? []
+    const grandRev = allProds.reduce((s, p) => s + Number(p.revenue), 0)
+
+    downloadXLSX(`TenPOS-Sales-${today}`, [
+      {
+        name: 'Summary', periodLabel: label,
+        columns: [{ header: 'Metric', width: 28 }, { header: 'Value', type: 'text', width: 24 }],
+        rows: [
+          ['Total Revenue',      fmt(totalRevenue)],
+          ['Total Transactions', String(totalTxns)],
+          ['Avg. Order Value',   fmt(summary ? Number(summary.avg_order_value) : 0)],
+          ['Top Product',        allProds[0]?.product_name ?? '—'],
+          ['Period',             label],
+        ],
+      },
+      {
+        name: 'By Day', periodLabel: label,
+        columns: [
+          { header: 'Date', type: 'date', width: 18 },
+          { header: 'Revenue (₱)', type: 'money', width: 18 },
+          { header: 'Orders', type: 'number', width: 12 },
+        ],
+        rows: (data?.salesByPeriod ?? []).map((p) => [
+          new Date(p.date + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }),
+          Number(p.revenue), Number(p.count),
+        ]),
+        totalsRow: [
+          'TOTAL',
+          (data?.salesByPeriod ?? []).reduce((s, p) => s + Number(p.revenue), 0),
+          (data?.salesByPeriod ?? []).reduce((s, p) => s + Number(p.count), 0),
+        ],
+      },
+      {
+        name: 'Products', periodLabel: label,
+        columns: [
+          { header: '#', type: 'number', width: 6 },
+          { header: 'Product Name', width: 36 },
+          { header: 'Category', width: 20 },
+          { header: 'Units Sold', type: 'number', width: 12 },
+          { header: 'Revenue (₱)', type: 'money', width: 18 },
+          { header: 'Revenue Share', type: 'percent', width: 14 },
+        ],
+        rows: allProds.map((p, i) => [
+          i + 1, p.product_name, p.category_name ?? 'Uncategorized',
+          p.quantity_sold, Number(p.revenue),
+          grandRev > 0 ? Number(p.revenue) / grandRev : 0,
+        ]),
+        totalsRow: ['', 'TOTAL', '', allProds.reduce((s, p) => s + p.quantity_sold, 0), grandRev, 1],
+      },
+    ], 'Sales Report')
+  }
 
   return (
     <div>
       <PageHeader
         title="Sales Report"
-        subtitle="Revenue analysis and trends"
+        subtitle={`${periodLabel(period, customFrom, customTo)} · Revenue analysis`}
         actions={
-          <div className="flex gap-2">
-            <div className="flex rounded-xl border border-gray-200 overflow-hidden text-xs">
-              {(['today', 'week', 'month', 'year'] as Period[]).map((t) => (
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Period tabs */}
+            <div className="flex items-center bg-gray-100 rounded-lg p-0.5 gap-0.5">
+              {(['today', 'week', 'month', 'year', 'custom'] as Period[]).map((t) => (
                 <button
                   key={t}
                   onClick={() => setPeriod(t)}
-                  className={`px-3 py-2 font-bold capitalize transition-colors ${t === period ? 'bg-brand text-white' : 'text-gray-500 hover:bg-gray-50'}`}
-                >{t}</button>
+                  className={`h-7 px-3 rounded-md text-xs font-medium transition-all ${
+                    t === period
+                      ? 'bg-white text-gray-800 shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  {t === 'custom' ? <CalendarRange className="w-3.5 h-3.5" /> : PERIOD_LABELS[t]}
+                </button>
               ))}
             </div>
-            <button className="btn-secondary flex items-center gap-1.5"><Download className="w-4 h-4" /> Export</button>
+
+            {/* Custom date range */}
+            {period === 'custom' && (
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="date" value={customFrom} max={customTo}
+                  onChange={(e) => setCustomFrom(e.target.value)}
+                  className="input-base h-8 text-xs"
+                />
+                <span className="text-xs text-gray-400">–</span>
+                <input
+                  type="date" value={customTo} min={customFrom} max={isoDate(new Date())}
+                  onChange={(e) => setCustomTo(e.target.value)}
+                  className="input-base h-8 text-xs"
+                />
+              </div>
+            )}
+
+            {/* Category filter */}
+            {categories.length > 2 && (
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="select-base h-8 text-xs"
+              >
+                {categories.map((c) => <option key={c}>{c}</option>)}
+              </select>
+            )}
+
+            <button onClick={handleExport} className="btn-secondary">
+              <Download className="w-3.5 h-3.5" /> Export
+            </button>
           </div>
         }
       />
 
       {loading ? (
         <div className="flex items-center justify-center h-48">
-          <Loader2 className="w-7 h-7 animate-spin text-brand" />
+          <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-            <StatCard label="Total Revenue"   value={fmt(totalRevenue)}  icon={DollarSign} />
-            <StatCard label="Transactions"    value={String(totalTxns)}  icon={ShoppingBag} iconColor="text-blue-600" iconBg="bg-blue-50" />
-            <StatCard label="Avg. Order Value" value={fmt(summary ? Number(summary.avg_order_value) : 0)} icon={TrendingUp} iconColor="text-green-600" iconBg="bg-green-50" />
+          {/* KPI strip */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+            <StatCard label="Total Revenue"    value={fmt(totalRevenue)}  icon={DollarSign}  iconColor="emerald" />
+            <StatCard label="Transactions"     value={String(totalTxns)}  icon={ShoppingBag} iconColor="blue"    />
+            <StatCard
+              label="Avg. Order Value"
+              value={fmt(summary ? Number(summary.avg_order_value) : 0)}
+              icon={TrendingUp}
+              iconColor="violet"
+            />
             <StatCard
               label="Top Product"
-              value={topProducts[0]?.product_name?.split(' ').slice(0, 2).join(' ') ?? '—'}
-              sub={topProducts[0] ? fmt(Number(topProducts[0].revenue)) : ''}
+              value={allProducts[0]?.product_name?.split(' ').slice(0, 2).join(' ') ?? '—'}
+              subLabel={allProducts[0] ? fmt(Number(allProducts[0].revenue)) : ''}
               icon={TrendingUp}
-              iconColor="text-purple-600"
-              iconBg="bg-purple-50"
+              iconColor="orange"
             />
           </div>
 
-          {/* Revenue over time + Payment pie */}
+          {/* Revenue chart + Payment breakdown */}
           <div className="grid lg:grid-cols-3 gap-4 mb-4">
-            <div className="card p-4 lg:col-span-2">
-              <p className="text-sm font-bold text-gray-800 mb-4">Revenue by Day</p>
+            <div className="card-elevated p-5 lg:col-span-2">
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-sm font-semibold text-gray-800">Revenue by Day</p>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-brand" />
+                  <span className="text-xs text-gray-400">Revenue</span>
+                </div>
+              </div>
               {dailyData.length === 0 ? (
-                <div className="h-56 flex items-center justify-center text-gray-300 text-sm">No data</div>
+                <EmptyState icon={TrendingUp} title="No data for this period" compact />
               ) : (
-                <ResponsiveContainer width="100%" height={220}>
-                  <AreaChart data={dailyData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                <ResponsiveContainer width="100%" height={210}>
+                  <AreaChart data={dailyData} margin={{ top: 4, right: 2, left: -8, bottom: 0 }}>
                     <defs>
-                      <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%"  stopColor={BRAND} stopOpacity={0.15} />
-                        <stop offset="95%" stopColor={BRAND} stopOpacity={0} />
+                      <linearGradient id="salesGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%"   stopColor={BRAND} stopOpacity={0.15} />
+                        <stop offset="100%" stopColor={BRAND} stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
                     <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} tickFormatter={fmtShort} width={48} />
-                    <Tooltip content={<ChartTooltip />} />
-                    <Area type="monotone" dataKey="Revenue" stroke={BRAND} strokeWidth={2.5} fill="url(#revenueGrad)" dot={{ r: 3, fill: BRAND, strokeWidth: 0 }} activeDot={{ r: 5 }} />
+                    <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} tickFormatter={fmtShort} width={44} />
+                    <Tooltip content={<ChartTooltip />} cursor={{ stroke: '#E5E7EB', strokeWidth: 1, strokeDasharray: '4 3' }} />
+                    <Area type="monotone" dataKey="Revenue" stroke={BRAND} strokeWidth={2.5} fill="url(#salesGrad)"
+                      dot={{ r: 3, fill: BRAND, strokeWidth: 0 }}
+                      activeDot={{ r: 5, fill: BRAND, stroke: '#fff', strokeWidth: 2 }}
+                    />
                   </AreaChart>
                 </ResponsiveContainer>
               )}
             </div>
 
-            <div className="card p-4">
-              <p className="text-sm font-bold text-gray-800 mb-4">Payment Methods</p>
+            <div className="card p-5">
+              <p className="text-sm font-semibold text-gray-800 mb-4">Payment Methods</p>
               {paymentData.length === 0 ? (
-                <div className="h-56 flex items-center justify-center text-gray-300 text-sm">No data</div>
+                <EmptyState icon={DollarSign} title="No data" compact />
               ) : (
                 <>
-                  <ResponsiveContainer width="100%" height={160}>
+                  <ResponsiveContainer width="100%" height={150}>
                     <PieChart>
-                      <Pie data={paymentData} cx="50%" cy="50%" innerRadius={45} outerRadius={72} paddingAngle={3} dataKey="value">
+                      <Pie data={paymentData} cx="50%" cy="50%" innerRadius={42} outerRadius={68}
+                        paddingAngle={3} dataKey="value">
                         {paymentData.map((_, i) => (
                           <Cell key={i} fill={PALETTE[i % PALETTE.length]} />
                         ))}
                       </Pie>
-                      <Tooltip formatter={(v: number) => [fmt(v), 'Revenue']} />
+                      <Tooltip formatter={(v) => [fmt(Number(v ?? 0)), 'Revenue']} />
                     </PieChart>
                   </ResponsiveContainer>
-                  <div className="space-y-1.5 mt-2">
+                  <div className="space-y-2 mt-2">
                     {paymentData.map((d, i) => (
-                      <div key={d.name} className="flex items-center justify-between text-xs">
+                      <div key={d.name} className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: PALETTE[i % PALETTE.length] }} />
-                          <span className="text-gray-600 font-medium">{d.name}</span>
+                          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: PALETTE[i % PALETTE.length] }} />
+                          <span className="text-xs text-gray-600">{d.name}</span>
                         </div>
-                        <span className="font-bold text-gray-800">{fmt(d.value)}</span>
+                        <span className="text-xs font-semibold text-gray-800 tabular-nums">{fmt(d.value)}</span>
                       </div>
                     ))}
                   </div>
@@ -176,37 +318,39 @@ export function SalesReport() {
             </div>
           </div>
 
-          {/* Orders per day bar + Hourly heatmap */}
+          {/* Orders per day + Hourly */}
           <div className="grid lg:grid-cols-2 gap-4 mb-4">
-            <div className="card p-4">
-              <p className="text-sm font-bold text-gray-800 mb-4">Orders per Day</p>
+            <div className="card p-5">
+              <p className="text-sm font-semibold text-gray-800 mb-4">Orders per Day</p>
               {dailyData.length === 0 ? (
-                <div className="h-48 flex items-center justify-center text-gray-300 text-sm">No data</div>
+                <EmptyState icon={ShoppingBag} title="No data" compact />
               ) : (
-                <ResponsiveContainer width="100%" height={190}>
-                  <BarChart data={dailyData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                <ResponsiveContainer width="100%" height={180}>
+                  <BarChart data={dailyData} margin={{ top: 4, right: 2, left: -8, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
                     <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
                     <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} allowDecimals={false} width={28} />
-                    <Tooltip formatter={(v: number) => [v, 'Orders']} />
-                    <Bar dataKey="Orders" fill="#3B82F6" radius={[4, 4, 0, 0]} maxBarSize={48} />
+                    <Tooltip formatter={(v) => [Number(v ?? 0), 'Orders']} />
+                    <Bar dataKey="Orders" fill="#3B82F6" radius={[3, 3, 0, 0]} maxBarSize={40} />
                   </BarChart>
                 </ResponsiveContainer>
               )}
             </div>
 
-            <div className="card p-4">
-              <p className="text-sm font-bold text-gray-800 mb-4">Hourly Revenue</p>
+            <div className="card p-5">
+              <p className="text-sm font-semibold text-gray-800 mb-4">Hourly Revenue</p>
               {hourlyData.length === 0 ? (
-                <div className="h-48 flex items-center justify-center text-gray-300 text-sm">No data</div>
+                <EmptyState icon={TrendingUp} title="No hourly data" compact />
               ) : (
-                <ResponsiveContainer width="100%" height={190}>
-                  <LineChart data={hourlyData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                <ResponsiveContainer width="100%" height={180}>
+                  <LineChart data={hourlyData} margin={{ top: 4, right: 2, left: -8, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
                     <XAxis dataKey="hour" tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} interval={2} />
-                    <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} tickFormatter={fmtShort} width={48} />
+                    <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} tickFormatter={fmtShort} width={44} />
                     <Tooltip content={<ChartTooltip />} />
-                    <Line type="monotone" dataKey="Revenue" stroke="#8B5CF6" strokeWidth={2.5} dot={false} activeDot={{ r: 4, fill: '#8B5CF6' }} />
+                    <Line type="monotone" dataKey="Revenue" stroke="#8B5CF6" strokeWidth={2.5} dot={false}
+                      activeDot={{ r: 4, fill: '#8B5CF6', stroke: '#fff', strokeWidth: 2 }}
+                    />
                   </LineChart>
                 </ResponsiveContainer>
               )}
@@ -214,38 +358,58 @@ export function SalesReport() {
           </div>
 
           {/* Top products table */}
-          <div className="card">
-            <div className="px-4 py-3 border-b border-gray-50">
-              <p className="text-sm font-bold text-gray-800">Top Products</p>
+          <div className="card overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100">
+              <p className="text-sm font-semibold text-gray-800">
+                Top Products
+                {category !== 'All' && <span className="ml-2 text-xs text-brand font-normal">· {category}</span>}
+              </p>
+              <span className="text-xs text-gray-400">{topProducts.length} products</span>
             </div>
             <table className="w-full">
-              <thead className="bg-gray-50">
+              <thead className="table-head">
                 <tr>
-                  <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-400">#</th>
-                  <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-400">Product</th>
-                  <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-400">Units</th>
-                  <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-400">Revenue</th>
-                  <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-400 w-36">Share</th>
+                  <th>#</th>
+                  <th>Product</th>
+                  <th className="hidden sm:table-cell">Category</th>
+                  <th className="text-right">Units</th>
+                  <th className="text-right">Revenue</th>
+                  <th className="hidden md:table-cell">Share</th>
                 </tr>
               </thead>
               <tbody>
                 {topProducts.length === 0 ? (
-                  <tr><td colSpan={5} className="px-4 py-6 text-center text-sm text-gray-300">No sales data</td></tr>
+                  <tr>
+                    <td colSpan={6}>
+                      <EmptyState icon={TrendingUp} title="No sales data" compact />
+                    </td>
+                  </tr>
                 ) : (
-                  topProducts.slice(0, 10).map((p, i) => {
+                  topProducts.slice(0, 20).map((p, i) => {
                     const pct = totalRevenue > 0 ? ((Number(p.revenue) / totalRevenue) * 100).toFixed(1) : '0'
                     return (
                       <tr key={p.product_name} className="table-row">
-                        <td className="px-4 py-3 text-xs font-bold text-gray-300">{i + 1}</td>
-                        <td className="px-4 py-3 text-sm font-medium text-gray-700">{p.product_name}</td>
-                        <td className="px-4 py-3 text-sm text-gray-500 text-right">{p.quantity_sold}</td>
-                        <td className="px-4 py-3 text-sm font-bold text-gray-800 text-right">{fmt(Number(p.revenue))}</td>
-                        <td className="px-4 py-3">
+                        <td>
+                          <span className="text-xs font-medium text-gray-400 tabular-nums">{i + 1}</span>
+                        </td>
+                        <td>
+                          <span className="text-sm font-medium text-gray-800">{p.product_name}</span>
+                        </td>
+                        <td className="hidden sm:table-cell">
+                          <span className="text-sm text-gray-400">{p.category_name ?? '—'}</span>
+                        </td>
+                        <td className="text-right">
+                          <span className="text-sm text-gray-600 tabular-nums">{p.quantity_sold}</span>
+                        </td>
+                        <td className="text-right">
+                          <span className="text-sm font-semibold text-gray-900 tabular-nums">{fmt(Number(p.revenue))}</span>
+                        </td>
+                        <td className="hidden md:table-cell">
                           <div className="flex items-center gap-2">
-                            <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                            <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                               <div className="h-full bg-brand rounded-full" style={{ width: `${pct}%` }} />
                             </div>
-                            <span className="text-xs text-gray-400 w-8 text-right">{pct}%</span>
+                            <span className="text-xs text-gray-400 w-8 text-right tabular-nums">{pct}%</span>
                           </div>
                         </td>
                       </tr>

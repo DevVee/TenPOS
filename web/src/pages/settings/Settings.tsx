@@ -1,10 +1,14 @@
-import { useState, useEffect } from 'react'
-import { Save, Check, Store, Receipt, Shield, RefreshCw, Clock, Printer, Package, KeyRound, Eye, EyeOff, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { Save, Check, Store, Receipt, Shield, RefreshCw, Clock, Printer, Package, KeyRound, Eye, EyeOff, CheckCircle2, AlertCircle, Loader2, Archive, Download, Calendar } from 'lucide-react'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { Modal } from '../../components/ui/Modal'
 import { useSettingsStore } from '../../store/settingsStore'
 import { useAuthStore } from '../../store/authStore'
 import { apiGetMyPinStatus, apiSetOverridePin, apiClearOverridePin } from '../../lib/api'
+import {
+  runBackup, getLastBackup, isAutoBackupEnabled, setAutoBackupEnabled,
+  isAutoBackupDue, daysSinceLastBackup, type BackupMeta,
+} from '../../lib/backup'
 
 /**
  * Toggle — pill switch.
@@ -46,6 +50,42 @@ export function Settings() {
   const s = useSettingsStore()
   const { user } = useAuthStore()
   const [saved, setSaved] = useState(false)
+
+  // ── Backup state ────────────────────────────────────────────────────────────
+  const [backupRunning,  setBackupRunning]  = useState(false)
+  const [backupError,    setBackupError]    = useState('')
+  const [backupDone,     setBackupDone]     = useState(false)
+  const [lastBackup,     setLastBackup]     = useState<BackupMeta | null>(() => getLastBackup())
+  const [autoBackup,     setAutoBackup]     = useState(() => isAutoBackupEnabled())
+
+  const handleToggleAutoBackup = (v: boolean) => {
+    setAutoBackup(v)
+    setAutoBackupEnabled(v)
+  }
+
+  const handleBackupNow = useCallback(async () => {
+    setBackupRunning(true)
+    setBackupError('')
+    setBackupDone(false)
+    try {
+      const meta = await runBackup()
+      setLastBackup(meta)
+      setBackupDone(true)
+      setTimeout(() => setBackupDone(false), 4000)
+    } catch (err) {
+      setBackupError(err instanceof Error ? err.message : 'Backup failed. Please try again.')
+    } finally {
+      setBackupRunning(false)
+    }
+  }, [])
+
+  // Auto-backup: trigger silently when the page loads and it's due
+  useEffect(() => {
+    if (isAutoBackupDue()) {
+      void handleBackupNow()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // intentionally runs once on mount
 
   // ── Manager Override PIN state ──────────────────────────────────────────────
   const isManager = user?.role === 'admin' || user?.role === 'manager'
@@ -228,6 +268,142 @@ export function Settings() {
             </div>
           </div>
         )}
+
+        {/* ── Backup & Export ─────────────────────────────────────────── */}
+        <div className="card p-5">
+          <SectionHeader icon={Archive} title="Backup & Export" />
+
+          {/* Auto-backup due banner */}
+          {isAutoBackupDue() && lastBackup && (
+            <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-4">
+              <Calendar className="w-4 h-4 text-amber-500 flex-shrink-0" />
+              <p className="text-sm text-amber-800 font-medium flex-1">
+                Weekly backup is running automatically…
+              </p>
+            </div>
+          )}
+
+          <div className="grid sm:grid-cols-2 gap-6">
+
+            {/* Left — last backup info + trigger */}
+            <div>
+              <p className="text-sm text-gray-600 mb-4">
+                Downloads a complete JSON snapshot of all your data — transactions, products,
+                staff, categories and vouchers. Store it in Google Drive, Dropbox, or a USB drive.
+              </p>
+
+              {/* Last backup status */}
+              <div className="bg-gray-50 border border-gray-100 rounded-xl p-4 mb-4">
+                {lastBackup ? (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                      <p className="text-sm font-semibold text-gray-800">Last backup successful</p>
+                    </div>
+                    <p className="text-xs text-gray-500 pl-6">
+                      {new Date(lastBackup.date).toLocaleString('en-PH', {
+                        weekday: 'long', month: 'long', day: 'numeric',
+                        year: 'numeric', hour: '2-digit', minute: '2-digit',
+                      })}
+                    </p>
+                    <p className="text-xs text-gray-400 pl-6">
+                      {lastBackup.records.toLocaleString()} records exported
+                      {daysSinceLastBackup() !== null && (
+                        <span className="ml-1">
+                          · {daysSinceLastBackup() === 0
+                              ? 'today'
+                              : `${daysSinceLastBackup()} day${daysSinceLastBackup() === 1 ? '' : 's'} ago`}
+                        </span>
+                      )}
+                    </p>
+                    <div className="pl-6 pt-1 flex gap-3 text-[11px] text-gray-400">
+                      <span>{lastBackup.tables.transactions} txns</span>
+                      <span>·</span>
+                      <span>{lastBackup.tables.products} products</span>
+                      <span>·</span>
+                      <span>{lastBackup.tables.staff} staff</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                    <p className="text-sm text-amber-700 font-medium">No backup on record</p>
+                  </div>
+                )}
+              </div>
+
+              {backupError && (
+                <div className="flex items-center gap-2 text-sm text-red-600 mb-3">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" /> {backupError}
+                </div>
+              )}
+
+              <button
+                onClick={handleBackupNow}
+                disabled={backupRunning}
+                className="btn-primary flex items-center gap-2"
+              >
+                {backupRunning ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Exporting…</>
+                ) : backupDone ? (
+                  <><Check className="w-4 h-4" /> Downloaded!</>
+                ) : (
+                  <><Download className="w-4 h-4" /> Back Up Now</>
+                )}
+              </button>
+            </div>
+
+            {/* Right — auto-backup schedule */}
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Schedule</p>
+
+              <div
+                className="flex items-start gap-3 cursor-pointer mb-4"
+                onClick={() => handleToggleAutoBackup(!autoBackup)}
+              >
+                <Toggle checked={autoBackup} onChange={handleToggleAutoBackup} />
+                <div>
+                  <p className="text-sm font-medium text-gray-700">Weekly auto-backup</p>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    Automatically downloads a backup when you open this page after 7 days
+                  </p>
+                </div>
+              </div>
+
+              {autoBackup && (
+                <div className="bg-brand-pale border border-brand/15 rounded-xl px-4 py-3 space-y-1.5">
+                  <p className="text-xs font-semibold text-brand">Auto-backup is on</p>
+                  {lastBackup ? (
+                    <p className="text-xs text-gray-500">
+                      Next backup in approximately{' '}
+                      <strong className="text-gray-700">
+                        {Math.max(0, 7 - (daysSinceLastBackup() ?? 0))} day{Math.max(0, 7 - (daysSinceLastBackup() ?? 0)) === 1 ? '' : 's'}
+                      </strong>
+                    </p>
+                  ) : (
+                    <p className="text-xs text-gray-500">Run your first backup manually to start the schedule.</p>
+                  )}
+                </div>
+              )}
+
+              <div className="mt-5 pt-4 border-t border-gray-100">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Format</p>
+                <div className="flex items-start gap-2.5">
+                  <div className="w-6 h-6 rounded-md bg-emerald-50 border border-emerald-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <span className="text-[9px] font-black text-emerald-700 leading-none">XLS</span>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-700">Excel (.xlsx) — 7 sheets</p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      Summary, Transactions, Items, Products, Staff, Categories &amp; Vouchers.
+                      Opens directly in Excel or Google Sheets.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
 
         {/* ── Row 2: Two columns ───────────────────────────────────────── */}
         <div className="grid lg:grid-cols-2 gap-4">

@@ -6,6 +6,7 @@ import { Modal } from '../../components/ui/Modal'
 import { apiGetTransactions, apiVoidTransaction, apiGetTransaction, apiReturnTransaction } from '../../lib/api'
 import { supabase } from '../../lib/supabase'
 import { useApiData } from '../../hooks/useApiData'
+import { useAuthStore } from '../../store/authStore'
 
 function fmt(n: number) { return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2 })}` }
 
@@ -17,6 +18,9 @@ interface TxnItem { id: string; product_name: string; quantity: number; total: n
 interface TxnDetail extends Txn { items: TxnItem[] }
 
 export function Returns() {
+  const { user }                        = useAuthStore()
+  const isManagerOrAdmin                = user?.role === 'admin' || user?.role === 'manager'
+
   const [search,      setSearch]      = useState('')
   const [voidModal,   setVoidModal]   = useState(false)
   const [returnModal, setReturnModal] = useState(false)
@@ -36,6 +40,8 @@ export function Returns() {
   const [retSearching, setRetSearching] = useState(false)
   const [retError,     setRetError]     = useState('')
   const [retSaving,    setRetSaving]    = useState(false)
+  // Per-item return quantities (item.id → qty string) — supports partial returns
+  const [retQtys,      setRetQtys]      = useState<Record<string, string>>({})
 
   const fetchReturns = useCallback(
     () => Promise.all([
@@ -138,13 +144,24 @@ export function Returns() {
     setRetSaving(true)
     setRetError('')
     try {
-      await apiReturnTransaction(
-        retTxn.id,
-        retTxn.items.map((item) => ({ item_id: item.id, quantity: item.quantity }))
-      )
+      // Build return items using per-item quantities (partial return support)
+      const returnItems = retTxn.items
+        .map((item) => {
+          const qty = parseInt(retQtys[item.id] ?? String(item.quantity), 10)
+          return { item_id: item.id, quantity: qty }
+        })
+        .filter((i) => i.quantity > 0)
+
+      if (returnItems.length === 0) {
+        setRetError('Please enter a return quantity of at least 1 for one or more items.')
+        return
+      }
+
+      await apiReturnTransaction(retTxn.id, returnItems)
       setReturnModal(false)
       setRetReceipt('')
       setRetTxn(null)
+      setRetQtys({})
       setTick((t) => t + 1)
     } catch (err) {
       setRetError(err instanceof Error ? err.message : 'Failed to process return')
@@ -166,6 +183,7 @@ export function Returns() {
     setRetReceipt('')
     setRetTxn(null)
     setRetError('')
+    setRetQtys({})
   }
 
   return (
@@ -174,14 +192,16 @@ export function Returns() {
         title="Returns & Voids"
         subtitle="Manager-approved returns and voided transactions"
         actions={
-          <div className="flex gap-2">
-            <button onClick={() => setReturnModal(true)} className="btn-secondary flex items-center gap-1.5">
-              <RotateCcw className="w-4 h-4" /> Process Return
-            </button>
-            <button onClick={() => setVoidModal(true)} className="btn-secondary flex items-center gap-1.5 text-red-600 border-red-200 hover:bg-red-50">
-              <XCircle className="w-4 h-4" /> Void Transaction
-            </button>
-          </div>
+          isManagerOrAdmin ? (
+            <div className="flex gap-2">
+              <button onClick={() => setReturnModal(true)} className="btn-secondary flex items-center gap-1.5">
+                <RotateCcw className="w-4 h-4" /> Process Return
+              </button>
+              <button onClick={() => setVoidModal(true)} className="btn-secondary flex items-center gap-1.5 text-red-600 border-red-200 hover:bg-red-50">
+                <XCircle className="w-4 h-4" /> Void Transaction
+              </button>
+            </div>
+          ) : undefined
         }
       />
 
@@ -329,11 +349,23 @@ export function Returns() {
               <div className="flex justify-between"><span className="text-gray-500">Total</span><span className="font-semibold text-brand">{fmt(Number(retTxn.total))}</span></div>
               {retTxn.items?.length > 0 && (
                 <div className="pt-2 border-t border-gray-200">
-                  <p className="text-xs text-gray-400 mb-1.5">Items to return:</p>
+                  <p className="text-xs text-gray-400 mb-2">Return quantities (edit for partial return):</p>
                   {retTxn.items.map((item) => (
-                    <div key={item.id} className="flex justify-between text-xs">
-                      <span className="text-gray-600">{item.product_name} × {item.quantity}</span>
-                      <span className="font-medium">{fmt(Number(item.total))}</span>
+                    <div key={item.id} className="flex items-center justify-between text-xs gap-2 mb-1.5">
+                      <span className="text-gray-600 flex-1 truncate">{item.product_name}</span>
+                      <span className="text-gray-400 flex-shrink-0">of {item.quantity}</span>
+                      <input
+                        type="number"
+                        min="0"
+                        max={item.quantity}
+                        value={retQtys[item.id] ?? item.quantity}
+                        onChange={(e) => setRetQtys((q) => ({ ...q, [item.id]: e.target.value }))}
+                        className="w-14 text-center border border-gray-200 rounded-md px-1.5 py-1 bg-white text-gray-800
+                          focus:outline-none focus:ring-1 focus:ring-brand/30 focus:border-brand text-xs"
+                      />
+                      <span className="font-medium text-gray-700 w-16 text-right flex-shrink-0">
+                        {fmt(Number(item.total) / item.quantity * (parseInt(retQtys[item.id] ?? String(item.quantity), 10) || 0))}
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -355,7 +387,7 @@ export function Returns() {
               className="btn-primary flex-1 disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {retSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              Process Full Return
+              Process Return
             </button>
           </div>
         </div>

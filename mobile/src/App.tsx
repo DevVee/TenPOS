@@ -1,8 +1,13 @@
 import { useEffect, Component } from 'react'
 import type { ReactNode, ErrorInfo } from 'react'
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { App as CapApp } from '@capacitor/app'
+import { Capacitor } from '@capacitor/core'
 import { useAuthStore } from './store/authStore'
-import { startSyncLoop, stopSyncLoop, refreshProductCache, refreshInventoryCache } from './lib/sync'
+import { usePOSStore } from './store/posStore'
+import { startSyncLoop, stopSyncLoop, refreshProductCache, refreshInventoryCache, onSyncEvent, getPendingCount, isOnline } from './lib/sync'
+import { subscribeTransactions, subscribeStock, subscribeProducts, subscribeCategories, unsubscribeAll } from './lib/realtime'
+import { useSettingsStore } from './store/settingsStore'
 
 import { AuthLayout } from './components/layout/AuthLayout'
 import { AppLayout } from './components/layout/AppLayout'
@@ -44,6 +49,7 @@ import { Vouchers } from './pages/settings/Vouchers'
 import { SyncLog } from './pages/settings/SyncLog'
 
 import { AuditLog } from './pages/audit/AuditLog'
+import { ProfileSettings } from './pages/profile/ProfileSettings'
 
 // ── Error boundary resets on every route change via the key prop ──────────────
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
@@ -125,6 +131,7 @@ function BoundedRoutes() {
           <Route path="/settings/sync-log" element={<SyncLog />} />
 
           <Route path="/audit" element={<AuditLog />} />
+          <Route path="/profile" element={<ProfileSettings />} />
         </Route>
 
         <Route path="/" element={<Navigate to="/login" replace />} />
@@ -135,9 +142,11 @@ function BoundedRoutes() {
 }
 
 function RequireAuth({ children }: { children: ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuthStore()
+  const { isAuthenticated, isLoading, pinLocked } = useAuthStore()
   if (isLoading) return <div className="min-h-screen bg-white" />
   if (!isAuthenticated) return <Navigate to="/login" replace />
+  // PIN lock check — prevent direct URL access to protected pages while locked
+  if (pinLocked) return <Navigate to="/pin" replace />
   return <>{children}</>
 }
 
@@ -152,14 +161,106 @@ function SessionRestorer() {
 }
 
 function SyncBootstrap() {
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
+  const isAuthenticated  = useAuthStore((s) => s.isAuthenticated)
+  const setSyncStatus    = usePOSStore((s) => s.setSyncStatus)
+  const setPendingCount  = usePOSStore((s) => s.setPendingCount)
+  const autoSyncInterval = useSettingsStore((s) => s.autoSyncInterval)
+
   useEffect(() => {
     if (!isAuthenticated) return
-    refreshProductCache()
-    refreshInventoryCache()
-    startSyncLoop()
-    return () => stopSyncLoop()
+
+    // Initial cache warm-up
+    void refreshProductCache()
+    void refreshInventoryCache()
+
+    // Helper to re-evaluate current status (async-safe)
+    const updateStatus = () => {
+      void isOnline().then((online) => {
+        if (!online) { setSyncStatus('offline'); return }
+        void getPendingCount().then((n) => {
+          setSyncStatus(n > 0 ? 'pending' : 'online')
+          setPendingCount(n)
+        })
+      })
+    }
+
+    const handleOnline  = () => { setSyncStatus('syncing'); updateStatus() }
+    const handleOffline = () => setSyncStatus('offline')
+
+    // Web fallback listeners (Capacitor replaces these natively in startSyncLoop)
+    window.addEventListener('online',  handleOnline)
+    window.addEventListener('offline', handleOffline)
+
+    const u1 = onSyncEvent('sync:start',     () => setSyncStatus('syncing'))
+    const u2 = onSyncEvent('sync:done',      updateStatus)
+    const u3 = onSyncEvent('sync:failed',    () => void isOnline().then((online) => setSyncStatus(online ? 'pending' : 'offline')))
+    const u4 = onSyncEvent('offline:queued', () => setSyncStatus('pending'))
+    const u5 = onSyncEvent('cache:updated',  updateStatus)
+
+    updateStatus()     // set initial status
+    startSyncLoop(undefined, autoSyncInterval * 1000)  // interval from settings
+
+    return () => {
+      stopSyncLoop()
+      window.removeEventListener('online',  handleOnline)
+      window.removeEventListener('offline', handleOffline)
+      u1(); u2(); u3(); u4(); u5()
+    }
+  }, [isAuthenticated, setSyncStatus, setPendingCount, autoSyncInterval])
+
+  return null
+}
+
+/**
+ * RealtimeBootstrap — subscribes to Supabase Realtime channels when online.
+ * Each channel event refreshes the Dexie cache AND triggers a UI re-render.
+ * This gives the APK true live updates just like the web dashboard.
+ */
+function RealtimeBootstrap() {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
+
+  useEffect(() => {
+    if (!isAuthenticated) return
+
+    // We don't need to do anything on the event callbacks here — the
+    // realtime.ts handlers already refresh the Dexie cache and the sync
+    // event bus ('cache:updated') wakes up any subscribed components.
+    const u1 = subscribeTransactions(() => {/* cache updated in realtime.ts */})
+    const u2 = subscribeStock(() => {/* cache updated in realtime.ts */})
+    const u3 = subscribeProducts(() => {/* cache updated in realtime.ts */})
+    const u4 = subscribeCategories(() => {/* cache updated in realtime.ts */})
+
+    return () => {
+      u1(); u2(); u3(); u4()
+      unsubscribeAll()
+    }
   }, [isAuthenticated])
+
+  return null
+}
+
+/** Android hardware back-button: navigate back, or minimize app if at root */
+function AndroidBackHandler() {
+  const navigate = useNavigate()
+  const location = useLocation()
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return
+    const listener = CapApp.addListener('backButton', ({ canGoBack }) => {
+      // If browser history has a previous entry, go back
+      if (canGoBack) {
+        navigate(-1)
+      } else if (location.pathname === '/pin' || location.pathname === '/login') {
+        // At auth screens — minimize app instead of closing
+        void CapApp.minimizeApp()
+      } else {
+        // At a root page — navigate to POS
+        navigate('/pos', { replace: true })
+      }
+    })
+    return () => { void listener.then((h) => h.remove()) }
+  }, [navigate, location.pathname])
+
   return null
 }
 
@@ -168,6 +269,8 @@ export default function App() {
     <BrowserRouter>
       <SessionRestorer />
       <SyncBootstrap />
+      <RealtimeBootstrap />
+      <AndroidBackHandler />
       <BoundedRoutes />
     </BrowserRouter>
   )

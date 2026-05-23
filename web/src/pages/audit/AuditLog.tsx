@@ -4,7 +4,7 @@ import { Badge } from '../../components/ui/Badge'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { apiGetAuditLog } from '../../lib/api'
 import { useApiData } from '../../hooks/useApiData'
-import { downloadCSV } from '../../lib/csvExport'
+import { downloadXLSX } from '../../lib/xlsxExport'
 
 interface AuditEntry {
   id: string
@@ -39,10 +39,21 @@ export function AuditLog() {
   const entries = data?.data ?? []
 
   const handleExport = () => {
-    downloadCSV(
-      `audit-log-${new Date().toISOString().slice(0, 10)}`,
-      ['Severity', 'Action', 'User', 'Details', 'IP', 'Timestamp'],
-      filtered.map((a) => [a.severity, a.action, a.user, a.details, a.ip, a.timestamp])
+    downloadXLSX(
+      `TenPOS-Audit-Log-${new Date().toISOString().slice(0, 10)}`,
+      [{
+        name: 'Audit Log',
+        columns: [
+          { header: 'Severity',  width: 12 },
+          { header: 'Action',    width: 32 },
+          { header: 'User',      width: 22 },
+          { header: 'Details',   width: 44 },
+          { header: 'IP Address',width: 16 },
+          { header: 'Timestamp', type: 'date', width: 22 },
+        ],
+        rows: filtered.map((a) => [a.severity, a.action, a.user, a.details, a.ip, a.timestamp]),
+      }],
+      'Audit Log'
     )
   }
 
