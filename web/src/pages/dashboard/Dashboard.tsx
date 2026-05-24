@@ -85,11 +85,11 @@ export function Dashboard() {
 
   const load = useCallback(async () => {
     try {
-      const branchParam = activeBranch ? { branch_id: activeBranch } : {}
+      const bp: Record<string, string> = activeBranch ? { branch_id: activeBranch } : {}
       const [sales, yest, txns, ls] = await Promise.all([
-        apiSalesReport({ from: today     + 'T00:00:00', to: today     + 'T23:59:59', ...branchParam }) as Promise<SalesData>,
-        apiSalesReport({ from: yesterday + 'T00:00:00', to: yesterday + 'T23:59:59', ...branchParam }) as Promise<SalesData>,
-        apiGetTransactions({ limit: '6', sort: 'desc', ...branchParam }) as Promise<{ data: Transaction[] }>,
+        apiSalesReport({ from: today     + 'T00:00:00', to: today     + 'T23:59:59', ...bp }) as Promise<SalesData>,
+        apiSalesReport({ from: yesterday + 'T00:00:00', to: yesterday + 'T23:59:59', ...bp }) as Promise<SalesData>,
+        apiGetTransactions({ limit: '6', sort: 'desc', ...bp }) as Promise<{ data: Transaction[] }>,
         apiGetLowStock(activeBranch ?? undefined) as Promise<LowStockItem[]>,
       ])
       setSalesData(sales)

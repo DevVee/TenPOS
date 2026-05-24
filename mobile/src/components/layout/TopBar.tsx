@@ -1,9 +1,9 @@
-import { Menu, Wifi, WifiOff, RefreshCw, Bell, ChevronRight, MapPin } from 'lucide-react'
+import { Menu, Wifi, WifiOff, RefreshCw, ChevronRight, MapPin } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
 import { useState, useEffect, useRef } from 'react'
 import { usePOSStore } from '../../store/posStore'
 import { useAuthStore } from '../../store/authStore'
-import { useNavigate } from 'react-router-dom'
+import { useLogoutConfirm } from '../../hooks/useLogoutConfirm'
 import type { User } from '../../types'
 
 interface TopBarProps {
@@ -44,26 +44,27 @@ function Breadcrumb() {
 
   if (parts.length === 0) return null
 
+  const lastLabel = ROUTE_LABELS[parts[parts.length - 1]] ?? parts[parts.length - 1]
+
   return (
     <nav className="flex items-center gap-1 text-sm" aria-label="Breadcrumb">
-      {parts.map((seg, i) => {
-        const label = ROUTE_LABELS[seg] ?? seg
-        const isLast = i === parts.length - 1
-        return (
-          <span key={seg} className="flex items-center gap-1">
-            {i > 0 && <ChevronRight className="w-3 h-3 text-gray-300 flex-shrink-0" />}
-            <span
-              className={`font-medium leading-none ${
-                isLast
-                  ? 'text-gray-800 text-sm'
-                  : 'text-gray-400 text-sm hover:text-gray-600 transition-colors'
-              }`}
-            >
-              {label}
+      {/* Mobile: current page title only */}
+      <span className="sm:hidden font-medium text-gray-800 text-sm leading-none">{lastLabel}</span>
+      {/* Desktop: full breadcrumb */}
+      <span className="hidden sm:flex items-center gap-1">
+        {parts.map((seg, i) => {
+          const label = ROUTE_LABELS[seg] ?? seg
+          const isLast = i === parts.length - 1
+          return (
+            <span key={seg} className="flex items-center gap-1">
+              {i > 0 && <ChevronRight className="w-3 h-3 text-gray-300 flex-shrink-0" />}
+              <span className={`font-medium leading-none ${isLast ? 'text-gray-800 text-sm' : 'text-gray-400 text-sm hover:text-gray-600 transition-colors'}`}>
+                {label}
+              </span>
             </span>
-          </span>
-        )
-      })}
+          )
+        })}
+      </span>
     </nav>
   )
 }
@@ -81,7 +82,7 @@ function SyncIndicator({ status }: { status: SyncStatus }) {
   const Icon = c.icon
 
   return (
-    <div className={`hidden sm:flex items-center gap-1.5 text-xs font-medium ${c.cls}`} title={c.label}>
+    <div className={`flex items-center gap-1.5 text-xs font-medium ${c.cls}`} title={c.label}>
       <Icon className={`w-3.5 h-3.5 ${status === 'syncing' ? 'animate-spin' : ''}`} />
       <span className="hidden lg:inline">{c.label}</span>
     </div>
@@ -89,10 +90,9 @@ function SyncIndicator({ status }: { status: SyncStatus }) {
 }
 
 function ProfileMenu({ user }: { user: User }) {
-  const { logout } = useAuthStore()
-  const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const { trigger: triggerLogout, modal: logoutModal } = useLogoutConfirm()
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -136,12 +136,13 @@ function ProfileMenu({ user }: { user: User }) {
           </Link>
           <div className="border-t border-gray-100 mt-1 pt-1">
             <button
-              onClick={() => { setOpen(false); logout(); navigate('/login') }}
+              onClick={() => { setOpen(false); triggerLogout() }}
               className="flex items-center gap-2.5 px-3 py-2 w-full text-sm text-red-600 hover:bg-red-50 transition-colors"
             >
               Sign out
             </button>
           </div>
+          {logoutModal}
         </div>
       )}
     </div>
@@ -178,11 +179,6 @@ export function TopBar({ onToggleSidebar }: TopBarProps) {
             <span className="truncate max-w-[120px]">{user.branch}</span>
           </div>
         )}
-
-        {/* Notifications (placeholder) */}
-        <button className="relative w-8 h-8 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors flex items-center justify-center">
-          <Bell className="w-4 h-4" />
-        </button>
 
         {/* Profile */}
         {user && <ProfileMenu user={user} />}

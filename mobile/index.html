@@ -9,16 +9,66 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="TenPOS" />
-    <meta name="theme-color" content="#C0392B" />
+    <meta name="theme-color" content="#E5484D" />
     <link rel="manifest" href="/manifest.json" />
-    <title>TenPOS — Ten Foundation Philippines</title>
+    <title>TenPOS</title>
+
+    <!-- Non-blocking font load: preload the CSS, swap to all on load -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="preload" as="style"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" />
+    <link rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      media="print" onload="this.media='all'" />
+    <noscript>
+      <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" />
+    </noscript>
+
+    <!-- Inline loading screen — visible immediately, before any JS parses -->
+    <style>
+      *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+      html,body{height:100%;background:#fff}
+      #app-loading{
+        position:fixed;inset:0;z-index:9999;
+        display:flex;flex-direction:column;align-items:center;justify-content:center;
+        gap:20px;background:#fff;
+      }
+      #app-loading .logo-wrap{
+        width:72px;height:72px;border-radius:20px;
+        background:#E5484D;display:flex;align-items:center;justify-content:center;
+        box-shadow:0 8px 24px rgba(229,72,77,.30);
+      }
+      #app-loading .logo-wrap img{width:48px;height:48px;object-fit:contain}
+      #app-loading .spinner{
+        width:32px;height:32px;border-radius:50%;
+        border:3px solid #fee2e2;border-top-color:#E5484D;
+        animation:tenpos-spin .75s linear infinite;
+      }
+      #app-loading p{
+        color:#9ca3af;font-size:13px;
+        font-family:system-ui,-apple-system,sans-serif;
+        letter-spacing:.02em;
+      }
+      #app-loading.fade-out{
+        opacity:0;transition:opacity .3s ease;pointer-events:none;
+      }
+      @keyframes tenpos-spin{to{transform:rotate(360deg)}}
+    </style>
   </head>
   <body>
+    <!-- Shown before React loads — removed by main.tsx once app is ready -->
+    <div id="app-loading">
+      <div class="logo-wrap">
+        <img src="/brand/logo.png" alt="TenPOS"
+          onerror="this.parentElement.innerHTML='<span style=\'color:#fff;font-weight:800;font-size:22px;font-family:system-ui\'>T</span>'" />
+      </div>
+      <div class="spinner"></div>
+      <p>Loading TenPOS…</p>
+    </div>
+
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

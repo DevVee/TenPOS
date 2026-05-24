@@ -213,6 +213,7 @@ export function StaffDetail() {
           <div className="px-4 py-3 border-b border-gray-50">
             <p className="text-sm font-medium text-gray-800">Recent Transactions</p>
           </div>
+          <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
@@ -239,6 +240,7 @@ export function StaffDetail() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 

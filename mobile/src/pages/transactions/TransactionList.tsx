@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { Badge } from '../../components/ui/Badge'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { apiGetTransactions } from '../../lib/api'
+import { useAuthStore } from '../../store/authStore'
 
 function fmt(n: number) { return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2 })}` }
 
@@ -50,6 +51,7 @@ function exportToCSV(transactions: Transaction[]) {
 
 export function TransactionList() {
   const navigate = useNavigate()
+  const { user } = useAuthStore()
   const [search, setSearch]           = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [page, setPage]               = useState(1)
@@ -75,9 +77,10 @@ export function TransactionList() {
         sort: 'desc',
       }
       if (statusFilter !== 'all') params.status = statusFilter
-      if (search.trim()) params.search = search.trim()
-      if (dateFrom) params.from = dateFrom + 'T00:00:00'
-      if (dateTo)   params.to   = dateTo   + 'T23:59:59'
+      if (search.trim())          params.search    = search.trim()
+      if (dateFrom)               params.from      = dateFrom + 'T00:00:00'
+      if (dateTo)                 params.to        = dateTo   + 'T23:59:59'
+      if (user?.branch_id)        params.branch_id = user.branch_id
 
       const res = await apiGetTransactions(params) as { data: Transaction[]; total: number }
       setTransactions(res.data ?? [])
@@ -87,7 +90,7 @@ export function TransactionList() {
     } finally {
       setLoading(false)
     }
-  }, [search, statusFilter, page, dateFrom, dateTo])
+  }, [search, statusFilter, page, dateFrom, dateTo, user?.branch_id])
 
   useEffect(() => { load() }, [load])
 
@@ -120,22 +123,24 @@ export function TransactionList() {
       />
 
       {/* Filters row */}
-      <div className="flex flex-wrap items-center gap-3 mb-3">
-        <div className="relative flex-1 min-w-48">
+      <div className="flex flex-col gap-2.5 mb-4 md:mb-5">
+        {/* Search */}
+        <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
-            className="input-base pl-9"
+            className="input-base pl-9 w-full"
             placeholder="Search receipt # or cashier..."
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1) }}
           />
         </div>
-        <div className="flex gap-1.5">
+        {/* Status pills — horizontal scroll on mobile */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-0.5" style={{ scrollbarWidth: 'none' }}>
           {['all', 'completed', 'voided', 'returned'].map((s) => (
             <button
               key={s}
               onClick={() => { setStatusFilter(s); setPage(1) }}
-              className={`px-3 py-2 rounded-lg text-xs font-medium capitalize transition-colors ${
+              className={`flex-shrink-0 px-3 py-2 rounded-lg text-xs font-medium capitalize transition-colors ${
                 statusFilter === s
                   ? 'bg-brand text-white'
                   : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
@@ -145,12 +150,14 @@ export function TransactionList() {
             </button>
           ))}
         </div>
+        {/* Date range button — sits on same row as status pills */}
         <button
           onClick={() => setShowDateFilter((v) => !v)}
-          className={`btn-secondary flex items-center gap-1.5 ${hasDateFilter ? 'border-brand text-brand bg-brand/5' : ''}`}
+          className={`flex-shrink-0 btn-secondary flex items-center gap-1.5 ml-auto ${hasDateFilter ? 'border-brand text-brand bg-brand/5' : ''}`}
         >
           <Calendar className="w-4 h-4" />
-          {hasDateFilter ? `${dateFrom || '…'} → ${dateTo || '…'}` : 'Date Range'}
+          <span className="hidden sm:inline">{hasDateFilter ? `${dateFrom || '…'} → ${dateTo || '…'}` : 'Date Range'}</span>
+          <span className="sm:hidden">{hasDateFilter ? `${dateFrom || '…'}` : 'Date'}</span>
           {hasDateFilter && (
             <span
               onClick={(e) => { e.stopPropagation(); clearDates() }}

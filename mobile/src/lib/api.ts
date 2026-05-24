@@ -1,5 +1,5 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// TenPOS Mobile — Dexie-first API layer
+﻿// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// TenPOS Mobile â€” Dexie-first API layer
 //
 // ALL reads come from Dexie (fast, offline-capable).
 // Writes: transactions go to Dexie immediately + Supabase when online.
@@ -7,26 +7,18 @@
 //
 // Function signatures are identical to web/src/lib/api.ts so pages work
 // in both contexts without changes.
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 import { supabase, SESSION_KEY } from './supabase'
-import { createClient } from '@supabase/supabase-js'
 import { db } from './db'
 import { submitTransaction as syncSubmitTransaction, refreshProductCache, refreshInventoryCache } from './sync'
 import { v4 as uuid } from 'uuid'
 
-/**
- * Admin Supabase client using the service role key.
- * Used ONLY for staff creation — auth.admin.createUser() bypasses email
- * confirmation and never overwrites the admin's active session.
- */
-const _adminClient = createClient(
-  import.meta.env.VITE_SUPABASE_URL as string,
-  import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY as string,
-  { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } },
-)
+// NOTE: The Supabase service role key is NOT used here.
+// Staff creation/deletion calls the Edge Function (supabase/functions/create-staff)
+// which holds the key server-side, keeping it out of the APK bundle.
 
-// ─── Session token helpers ────────────────────────────────────────────────────
+// â”€â”€â”€ Session token helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const BASE_URL = 'supabase'
 
@@ -56,7 +48,7 @@ export function clearTokens() {
   void supabase.auth.signOut()
 }
 
-// ─── Auth ─────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Auth â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function apiLogin(usernameOrEmail: string, password: string) {
   const email = usernameOrEmail.includes('@')
@@ -119,7 +111,7 @@ export async function apiLogout() {
 }
 
 export async function apiMe() {
-  // Try Supabase session (local JWT validation — no network needed if cached)
+  // Try Supabase session (local JWT validation â€” no network needed if cached)
   const { data: { session } } = await supabase.auth.getSession()
   if (session) {
     // Try network first for fresh data
@@ -184,7 +176,7 @@ export async function apiMe() {
 // (setDevicePin / verifyDevicePin / hasDevicePin). No network call needed.
 
 export async function apiUpdateProfile(data: { name?: string; email?: string }) {
-  _requireOnline()
+  await _requireOnline()
   const { data: { session } } = await supabase.auth.getSession()
   if (!session) throw new Error('Not authenticated')
 
@@ -210,7 +202,7 @@ export async function apiUpdateProfile(data: { name?: string; email?: string }) 
 }
 
 export async function apiChangePassword(newPassword: string) {
-  _requireOnline()
+  await _requireOnline()
   if (newPassword.length < 8) throw new Error('Password must be at least 8 characters.')
   const { error } = await supabase.auth.updateUser({ password: newPassword })
   if (error) throw new Error(error.message)
@@ -243,7 +235,7 @@ export async function apiUploadAvatar(file: File): Promise<string> {
   const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path)
   const avatarUrl = `${publicUrl}?v=${Date.now()}`
 
-  // Persist URL in Auth metadata — survives sessions and syncs across devices
+  // Persist URL in Auth metadata â€” survives sessions and syncs across devices
   await supabase.auth.updateUser({ data: { avatar_url: avatarUrl } })
 
   return avatarUrl
@@ -253,7 +245,7 @@ export async function apiRemoveAvatar(): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return
 
-  // Remove all common extension variants — ignore errors (file may not exist)
+  // Remove all common extension variants â€” ignore errors (file may not exist)
   await supabase.storage.from('avatars')
     .remove(['jpg', 'png', 'gif', 'webp', 'jpeg'].map((e) => `${user.id}/avatar.${e}`))
     .catch(() => {})
@@ -262,7 +254,7 @@ export async function apiRemoveAvatar(): Promise<void> {
   await supabase.auth.updateUser({ data: { avatar_url: null } })
 }
 
-// ─── Products ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Products â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function apiGetProducts(params?: Record<string, string>) {
   let products = await db.products.toArray()
@@ -329,6 +321,17 @@ export async function apiGetProduct(id: string) {
     image_url: p.image_url, active: p.active, variants: p.variants,
     stock, reorder_point: inv?.reorder_point ?? 5,
     created_at: '', updated_at: '',
+    // Extended fields (populated after first online sync)
+    description:  p.description,
+    brand:        p.brand,
+    material:     p.material,
+    color:        p.color,
+    weight_grams: p.weight_grams,
+    length_cm:    p.length_cm,
+    width_cm:     p.width_cm,
+    height_cm:    p.height_cm,
+    tags:         p.tags,
+    notes:        p.notes,
   }
 }
 
@@ -340,7 +343,7 @@ export async function apiGetProductByBarcode(barcode: string) {
 }
 
 export async function apiCreateProduct(data: Record<string, unknown>) {
-  _requireOnline()
+  await _requireOnline()
   const { data: { session } } = await supabase.auth.getSession()
   if (!session) throw new Error('Not authenticated')
   const cached = await db.staff.where('auth_id').equals(session.user.id).first()
@@ -379,7 +382,7 @@ export async function apiCreateProduct(data: Record<string, unknown>) {
 }
 
 export async function apiUpdateProduct(id: string, data: Record<string, unknown>) {
-  _requireOnline()
+  await _requireOnline()
   const col: Record<string, unknown> = {}
   const fields = ['name', 'sku', 'barcode', 'category_id', 'price', 'cost', 'image_url', 'active'] as const
   for (const f of fields) if (data[f] !== undefined) col[f] = f === 'price' || f === 'cost' ? Number(data[f]) : data[f]
@@ -401,7 +404,7 @@ export async function apiUpdateProduct(id: string, data: Record<string, unknown>
 }
 
 export async function apiDeleteProduct(id: string) {
-  _requireOnline()
+  await _requireOnline()
   const { error } = await supabase.from('products').delete().eq('id', id)
   if (error) throw new Error(error.message)
   await db.products.delete(id)
@@ -409,7 +412,7 @@ export async function apiDeleteProduct(id: string) {
   return { ok: true }
 }
 
-// ─── Categories ───────────────────────────────────────────────────────────────
+// â”€â”€â”€ Categories â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function apiGetCategories() {
   const cats = await db.categories.toArray()
@@ -430,12 +433,12 @@ export async function apiGetCategories() {
 }
 
 export async function apiCreateCategory(data: { name: string; description?: string }) {
-  _requireOnline()
+  await _requireOnline()
   const { data: { session } } = await supabase.auth.getSession()
   const cached = session ? await db.staff.where('auth_id').equals(session.user.id).first() : null
   const { data: cat, error } = await supabase
     .from('categories')
-    .insert({ branch_id: cached?.branch_id, name: data.name, icon: data.description ?? '📦', active: true })
+    .insert({ branch_id: cached?.branch_id, name: data.name, icon: data.description ?? 'ðŸ“¦', active: true })
     .select('id, name, icon').single()
   if (error) throw new Error(error.message)
   const c = cat as Record<string, unknown>
@@ -444,7 +447,7 @@ export async function apiCreateCategory(data: { name: string; description?: stri
 }
 
 export async function apiUpdateCategory(id: string, data: { name?: string; description?: string }) {
-  _requireOnline()
+  await _requireOnline()
   const col: Record<string, unknown> = {}
   if (data.name        !== undefined) col.name = data.name
   if (data.description !== undefined) col.icon = data.description
@@ -457,14 +460,14 @@ export async function apiUpdateCategory(id: string, data: { name?: string; descr
 }
 
 export async function apiDeleteCategory(id: string) {
-  _requireOnline()
+  await _requireOnline()
   const { error } = await supabase.from('categories').delete().eq('id', id)
   if (error) throw new Error(error.message)
   await db.categories.delete(id)
   return { ok: true }
 }
 
-// ─── Inventory / Stock levels ─────────────────────────────────────────────────
+// â”€â”€â”€ Inventory / Stock levels â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function apiGetInventory(branchId?: string) {
   let inv = await db.inventory.toArray()
@@ -474,7 +477,7 @@ export async function apiGetInventory(branchId?: string) {
   const products   = await db.products.bulkGet(productIds)
   const prodMap    = new Map(products.filter(Boolean).map((p) => [p!.id, p!]))
 
-  // Build branch_id → branch_name lookup from the staff cache (staff have branch_name populated on login)
+  // Build branch_id â†’ branch_name lookup from the staff cache (staff have branch_name populated on login)
   const allStaff = await db.staff.toArray()
   const branchNameMap = new Map<string, string>()
   for (const s of allStaff) {
@@ -509,7 +512,7 @@ export async function apiGetLowStock(branchId?: string) {
       ({ product_id, product_name, sku, category_name, stock, reorder_point, cost }))
 }
 
-// ─── Transactions ─────────────────────────────────────────────────────────────
+// â”€â”€â”€ Transactions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function apiCreateTransaction(payload: {
   branch_id: string
@@ -528,12 +531,10 @@ export async function apiGetTransactions(params?: Record<string, string>) {
   // Sort newest first
   txns.sort((a, b) => b.created_at.localeCompare(a.created_at))
 
-  if (params?.status) {
-    const s = params.status === 'returned' ? 'returned' : params.status
-    txns = txns.filter((t) => t.status === s)
-  }
-  if (params?.from) txns = txns.filter((t) => t.created_at >= params.from)
-  if (params?.to)   txns = txns.filter((t) => t.created_at <= params.to)
+  if (params?.status)    txns = txns.filter((t) => t.status === (params.status === 'returned' ? 'returned' : params.status!))
+  if (params?.branch_id) txns = txns.filter((t) => t.branch_id === params.branch_id)
+  if (params?.from)      txns = txns.filter((t) => t.created_at >= params.from)
+  if (params?.to)        txns = txns.filter((t) => t.created_at <= params.to)
   if (params?.search) {
     const q = params.search.toLowerCase()
     txns = txns.filter((t) =>
@@ -596,7 +597,7 @@ export async function apiGetTransaction(id: string) {
 }
 
 export async function apiVoidTransaction(id: string, reason: string) {
-  _requireOnline()
+  await _requireOnline()
   const { error } = await supabase.rpc('void_transaction', {
     p_transaction_id: id,
     p_reason:         reason,
@@ -614,7 +615,7 @@ export async function apiVoidTransaction(id: string, reason: string) {
 }
 
 export async function apiVoidWithPin(id: string, reason: string, pin: string) {
-  _requireOnline()
+  await _requireOnline()
   const { error } = await supabase.rpc('void_with_pin', {
     p_transaction_id: id, p_reason: reason, p_pin: pin,
   })
@@ -624,13 +625,13 @@ export async function apiVoidWithPin(id: string, reason: string, pin: string) {
 }
 
 export async function apiSetOverridePin(pin: string) {
-  _requireOnline()
+  await _requireOnline()
   const { error } = await supabase.rpc('set_override_pin', { p_pin: pin })
   if (error) throw new Error(error.message)
 }
 
 export async function apiClearOverridePin() {
-  _requireOnline()
+  await _requireOnline()
   const { error } = await supabase.rpc('clear_override_pin')
   if (error) throw new Error(error.message)
 }
@@ -648,7 +649,7 @@ export async function apiReturnTransaction(
   id: string,
   items: { item_id: string; quantity: number; reason?: string }[],
 ) {
-  _requireOnline()
+  await _requireOnline()
   const { data: tx } = await supabase
     .from('transactions').select('branch_id, receipt_no').eq('id', id).single()
   if (!tx) throw new Error('Transaction not found')
@@ -656,6 +657,7 @@ export async function apiReturnTransaction(
   const itemIds = items.map((i) => i.item_id)
   const { data: txItems } = await supabase
     .from('transaction_items').select('id, product_id, unit_price, quantity, product_name')
+    .eq('transaction_id', id)   // HIGH-08: scope to this transaction only (prevents cross-txn item injection)
     .in('id', itemIds)
 
   const totalRefund = ((txItems ?? []) as Record<string, unknown>[]).reduce((sum, ti) => {
@@ -678,7 +680,7 @@ export async function apiReturnTransaction(
   return { ok: true }
 }
 
-// ─── Vouchers ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Vouchers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function apiValidateVoucher(code: string, subtotal: number) {
   const vouchers = await db.vouchers.toArray()
@@ -701,7 +703,7 @@ export async function apiValidateVoucher(code: string, subtotal: number) {
 
   if (v.expires_at && new Date(v.expires_at) < new Date()) return { valid: false as const, error: 'Voucher has expired.' }
   if (v.used_count >= v.max_uses) return { valid: false as const, error: 'Voucher usage limit reached.' }
-  if (subtotal < v.min_purchase) return { valid: false as const, error: `Minimum purchase of ₱${v.min_purchase} required.` }
+  if (subtotal < v.min_purchase) return { valid: false as const, error: `Minimum purchase of â‚±${v.min_purchase} required.` }
 
   const discount_amount = v.discount_type === 'percent'
     ? (subtotal * v.discount_value) / 100
@@ -732,7 +734,7 @@ export async function apiGetVouchers(params?: Record<string, string>) {
 }
 
 export async function apiCreateVoucher(data: Record<string, unknown>) {
-  _requireOnline()
+  await _requireOnline()
   const { data: v, error } = await supabase
     .from('vouchers')
     .insert({
@@ -760,9 +762,13 @@ export async function apiCreateVoucher(data: Record<string, unknown>) {
 }
 
 export async function apiUpdateVoucherById(id: string, data: Record<string, unknown>) {
-  _requireOnline()
+  await _requireOnline()
+  // HIGH-07: whitelist updatable fields — prevent mass-assignment
+  const col: Record<string, unknown> = {}
+  const allowed = ['code', 'discount_type', 'discount_value', 'min_purchase', 'max_uses', 'active', 'expires_at'] as const
+  for (const f of allowed) if (data[f] !== undefined) col[f] = data[f]
   const { data: v, error } = await supabase
-    .from('vouchers').update(data).eq('id', id).select('*').single()
+    .from('vouchers').update(col).eq('id', id).select('*').single()
   if (error) throw new Error(error.message)
   const row = v as Record<string, unknown>
   const cached = {
@@ -778,19 +784,20 @@ export async function apiUpdateVoucherById(id: string, data: Record<string, unkn
 }
 
 export async function apiDeleteVoucher(id: string) {
-  _requireOnline()
+  await _requireOnline()
   const { error } = await supabase.from('vouchers').delete().eq('id', id)
   if (error) throw new Error(error.message)
   await db.vouchers.delete(id)
   return { ok: true }
 }
 
-// ─── Reports (computed locally from Dexie cache) ──────────────────────────────
+// â”€â”€â”€ Reports (computed locally from Dexie cache) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function apiSalesReport(params: Record<string, string>) {
   let txns = (await db.transactions.toArray()).filter((t) => t.status === 'completed')
-  if (params.from) txns = txns.filter((t) => t.created_at >= params.from)
-  if (params.to)   txns = txns.filter((t) => t.created_at <= params.to)
+  if (params.from)      txns = txns.filter((t) => t.created_at >= params.from)
+  if (params.to)        txns = txns.filter((t) => t.created_at <= params.to)
+  if (params.branch_id) txns = txns.filter((t) => t.branch_id  === params.branch_id)
 
   const total_revenue      = txns.reduce((s, t) => s + t.total, 0)
   const transaction_count  = txns.length
@@ -813,17 +820,26 @@ export async function apiSalesReport(params: Record<string, string>) {
   }
   const salesByPeriod = [...dayMap.entries()].map(([date, v]) => ({ date, ...v }))
 
-  const productMap = new Map<string, { product_name: string; quantity_sold: number; revenue: number }>()
+  // Build product cache for category lookup
+  const cachedProds = await db.products.toArray()
+  const cachedProdMap = new Map(cachedProds.map((p) => [p.id, p]))
+
+  const productMap = new Map<string, { product_name: string; category_name: string; quantity_sold: number; revenue: number }>()
   for (const t of txns) {
     for (const item of t.items) {
       if (!productMap.has(item.product_id)) {
-        productMap.set(item.product_id, { product_name: item.product_name, quantity_sold: 0, revenue: 0 })
+        productMap.set(item.product_id, {
+          product_name:  item.product_name,
+          category_name: cachedProdMap.get(item.product_id)?.category_name ?? '',
+          quantity_sold: 0,
+          revenue:       0,
+        })
       }
       productMap.get(item.product_id)!.quantity_sold += item.quantity
       productMap.get(item.product_id)!.revenue       += item.total
     }
   }
-  const topProducts = [...productMap.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 10)
+  const topProducts = [...productMap.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 20)
 
   // Payment method breakdown
   const methodMap = new Map<string, { total: number; count: number }>()
@@ -839,7 +855,7 @@ export async function apiSalesReport(params: Record<string, string>) {
     .map(([method, v]) => ({ method, total: v.total, count: v.count }))
     .sort((a, b) => b.total - a.total)
 
-  // Hourly heatmap (0–23)
+  // Hourly heatmap (0â€“23)
   const hourMap = new Map<number, { revenue: number; count: number }>()
   for (let h = 0; h < 24; h++) hourMap.set(h, { revenue: 0, count: 0 })
   for (const t of txns) {
@@ -854,8 +870,9 @@ export async function apiSalesReport(params: Record<string, string>) {
 
 export async function apiFinancialReport(params: Record<string, string>) {
   let txns = (await db.transactions.toArray()).filter((t) => t.status === 'completed')
-  if (params.from) txns = txns.filter((t) => t.created_at >= params.from)
-  if (params.to)   txns = txns.filter((t) => t.created_at <= params.to)
+  if (params.from)      txns = txns.filter((t) => t.created_at >= params.from)
+  if (params.to)        txns = txns.filter((t) => t.created_at <= params.to)
+  if (params.branch_id) txns = txns.filter((t) => t.branch_id  === params.branch_id)
 
   const inv      = await db.inventory.toArray()
   const products = await db.products.toArray()
@@ -869,7 +886,9 @@ export async function apiFinancialReport(params: Record<string, string>) {
     }, 0), 0)
   const gross_profit  = revenue - cogs
   const gross_margin  = revenue > 0 ? (gross_profit / revenue) * 100 : 0
-  const stock_value   = inv.reduce((s, i) => {
+  // Filter inventory by branch for accurate stock valuation
+  const filteredInv = params.branch_id ? inv.filter((i) => i.branch_id === params.branch_id) : inv
+  const stock_value = filteredInv.reduce((s, i) => {
     const p = prodMap.get(i.product_id)
     return s + (p?.cost ?? 0) * i.stock
   }, 0)
@@ -965,7 +984,7 @@ export async function apiInventoryReport(params?: Record<string, string>) {
   return { stockSummary, fastMovers, stockMovement, valueByCategory }
 }
 
-// ─── Staff management ─────────────────────────────────────────────────────────
+// â”€â”€â”€ Staff management â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function apiGetStaff(params?: Record<string, string>) {
   let staffList = await db.staff.toArray()
@@ -1030,21 +1049,30 @@ export async function apiGetStaffMember(id: string) {
 }
 
 export async function apiCreateStaff(data: Record<string, unknown>) {
-  _requireOnline()
+  await _requireOnline()
   const email    = (data.email as string).toLowerCase().trim()
   const password = data.password as string | undefined
   if (!password || password.length < 8) {
     throw new Error('A password of at least 8 characters is required to create a staff account.')
   }
 
-  // 1. Create the Supabase Auth user via the admin client (service role).
-  //    email_confirm: true bypasses confirmation so the account is immediately active.
-  const { data: authData, error: signUpErr } = await _adminClient.auth.admin.createUser({
-    email, password, email_confirm: true,
+  // 1. Call the Edge Function â€” service role key stays server-side, never in APK.
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) throw new Error('Not authenticated')
+
+  const fnUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-staff`
+  const res = await fetch(fnUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({ email, password }),
   })
-  if (signUpErr) throw new Error(`Auth error: ${signUpErr.message}`)
-  const authId = authData.user?.id
-  if (!authId) throw new Error('Failed to create auth account — no user ID returned.')
+  const fnBody = await res.json() as { auth_id?: string; error?: string }
+  if (!res.ok) throw new Error(fnBody.error ?? `Auth error (${res.status})`)
+  const authId = fnBody.auth_id
+  if (!authId) throw new Error('Failed to create auth account â€” no user ID returned.')
 
   // 2. Insert the staff row
   const { data: staff, error } = await supabase.from('staff').insert({
@@ -1070,7 +1098,7 @@ export async function apiCreateStaff(data: Record<string, unknown>) {
 }
 
 export async function apiUpdateStaff(id: string, data: Record<string, unknown>) {
-  _requireOnline()
+  await _requireOnline()
   const col: Record<string, unknown> = {}
   const fields = ['name', 'email', 'role', 'branch_id', 'status'] as const
   for (const f of fields) if (data[f] !== undefined) col[f] = data[f]
@@ -1082,14 +1110,14 @@ export async function apiUpdateStaff(id: string, data: Record<string, unknown>) 
 }
 
 export async function apiDeleteStaff(id: string) {
-  _requireOnline()
+  await _requireOnline()
   const { error } = await supabase.from('staff').delete().eq('id', id)
   if (error) throw new Error(error.message)
   await db.staff.delete(id)
   return { ok: true }
 }
 
-// ─── Branches ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Branches â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function apiGetBranches() {
   if (navigator.onLine) {
@@ -1101,11 +1129,11 @@ export async function apiGetBranches() {
       active: Boolean(b.active), terminalCount: Number(b.terminal_count ?? 0),
     }))
   }
-  return []  // offline — no cached branch list available
+  return []  // offline â€” no cached branch list available
 }
 
 export async function apiCreateBranch(data: Record<string, unknown>) {
-  _requireOnline()
+  await _requireOnline()
   const { data: b, error } = await supabase
     .from('branches')
     .insert({ name: data.name, address: data.address ?? '', manager_name: data.manager_name ?? '', active: true })
@@ -1116,15 +1144,26 @@ export async function apiCreateBranch(data: Record<string, unknown>) {
 }
 
 export async function apiUpdateBranch(id: string, data: Record<string, unknown>) {
-  _requireOnline()
+  await _requireOnline()
+  // HIGH-07: whitelist updatable fields — prevent mass-assignment
+  const col: Record<string, unknown> = {}
+  const allowed = ['name', 'address', 'manager_name', 'active', 'terminal_count'] as const
+  for (const f of allowed) if (data[f] !== undefined) col[f] = data[f]
   const { data: b, error } = await supabase
-    .from('branches').update(data).eq('id', id).select('id, name, address, manager_name, active').single()
+    .from('branches').update(col).eq('id', id).select('id, name, address, manager_name, active').single()
   if (error) throw new Error(error.message)
   const row = b as Record<string, unknown>
   return { id: row.id as string, name: row.name as string, address: row.address as string ?? '', managerName: row.manager_name as string ?? '', active: Boolean(row.active), terminalCount: 1 }
 }
 
-// ─── Audit log ────────────────────────────────────────────────────────────────
+export async function apiDeleteBranch(id: string) {
+  await _requireOnline()
+  const { error } = await supabase.from('branches').delete().eq('id', id)
+  if (error) throw new Error(error.message)
+  return { ok: true }
+}
+
+// â”€â”€â”€ Audit log â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const AUDIT_KEY = 'tenpos_mobile_audit'
 
@@ -1177,7 +1216,7 @@ export async function apiGetAuditLog(params?: Record<string, string>) {
   return { data: entries.slice(offset, offset + limit), total, page, limit }
 }
 
-// ─── Stock adjustments ────────────────────────────────────────────────────────
+// â”€â”€â”€ Stock adjustments â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 interface LocalAdjustment {
   id: string; product_id: string; product_name: string
@@ -1188,6 +1227,40 @@ interface LocalAdjustment {
 const ADJ_KEY = 'tenpos_mobile_adjustments'
 
 export async function apiGetAdjustments(params?: Record<string, string>) {
+  // When online: fetch from Supabase so adjustments made on web / other devices are visible
+  if (navigator.onLine) {
+    try {
+      let query = supabase
+        .from('stock_adjustments')
+        .select('id, product_id, type, quantity, reason, branch_id, created_at, products(name), staff(name)')
+        .order('created_at', { ascending: false })
+        .limit(200)
+
+      if (params?.product_id) query = query.eq('product_id', params.product_id)
+      if (params?.branch_id)  query = query.eq('branch_id',  params.branch_id)
+
+      const { data: rows } = await query
+      if (rows) {
+        const mapped: LocalAdjustment[] = (rows as Record<string, unknown>[]).map((r) => ({
+          id:           r.id           as string,
+          product_id:   r.product_id   as string,
+          product_name: ((r.products as { name: string } | null)?.name) ?? (r.product_id as string),
+          type:         r.type         as LocalAdjustment['type'],
+          quantity:     Number(r.quantity),
+          reason:       (r.reason      as string) ?? '',
+          by:           ((r.staff as { name: string } | null)?.name) ?? 'System',
+          branch_id:    r.branch_id    as string,
+          created_at:   r.created_at   as string,
+        }))
+        // Persist to localStorage so offline fallback is fresh
+        localStorage.setItem(ADJ_KEY, JSON.stringify(mapped.slice(0, 200)))
+        const limit = parseInt(params?.limit ?? '50', 10)
+        return { data: mapped.slice(0, limit), total: mapped.length }
+      }
+    } catch { /* fall through to localStorage */ }
+  }
+
+  // Offline fallback: use localStorage cache
   let adjs = JSON.parse(localStorage.getItem(ADJ_KEY) ?? '[]') as LocalAdjustment[]
   if (params?.product_id) adjs = adjs.filter((a) => a.product_id === params.product_id)
   if (params?.branch_id)  adjs = adjs.filter((a) => a.branch_id  === params.branch_id)
@@ -1200,13 +1273,26 @@ export async function apiCreateAdjustment(data: {
   product_id: string; type: 'in' | 'out' | 'correction' | 'damage' | 'return'
   quantity: number; reason: string; branch_id: string
 }) {
-  // Try Supabase first
+  const key = `${data.product_id}_base_${data.branch_id}`
+
+  // 1. Compute new stock ONCE from the current Dexie value
+  const inv = await db.inventory.get(key)
+  let newStock = inv ? inv.stock : 0
+  if (data.type === 'in' || data.type === 'return')       newStock += data.quantity
+  else if (data.type === 'out' || data.type === 'damage') newStock = Math.max(0, newStock - data.quantity)
+  else if (data.type === 'correction')                    newStock = Math.max(0, data.quantity)
+
+  // 2. Apply to Dexie immediately (optimistic update)
+  if (inv) await db.inventory.update(key, { stock: newStock })
+
+  // 3. Get current staff for audit trail
+  const { data: { session } } = await supabase.auth.getSession()
+  const staffRow = session ? await db.staff.where('auth_id').equals(session.user.id).first() : null
+
+  // 4. Sync to Supabase if online (fire-and-forget; failures queued via local log)
   if (navigator.onLine) {
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      const staffRow = session ? await db.staff.where('auth_id').equals(session.user.id).first() : null
-
-      const { error } = await supabase.from('stock_adjustments').insert({
+      const { error: adjErr } = await supabase.from('stock_adjustments').insert({
         product_id: data.product_id,
         branch_id:  data.branch_id,
         type:       data.type,
@@ -1214,37 +1300,21 @@ export async function apiCreateAdjustment(data: {
         reason:     data.reason,
         staff_id:   staffRow?.id ?? null,
       })
-      if (error) throw error
+      if (adjErr) throw adjErr
 
-      // Update stock_levels in Supabase
-      const key = `${data.product_id}_base_${data.branch_id}`
-      const inv  = await db.inventory.get(key)
-      if (inv) {
-        let newStock = inv.stock
-        if (data.type === 'in' || data.type === 'return') newStock += data.quantity
-        else if (data.type === 'out' || data.type === 'damage') newStock = Math.max(0, newStock - data.quantity)
-        else if (data.type === 'correction') newStock = data.quantity
-        await supabase.from('stock_levels').update({ stock: newStock }).eq('product_id', data.product_id).eq('branch_id', data.branch_id)
-        await db.inventory.update(key, { stock: newStock })
-      }
-    } catch { /* fall through to local */ }
-  }
-
-  // Also update Dexie immediately
-  const key = `${data.product_id}_base_${data.branch_id}`
-  const inv  = await db.inventory.get(key)
-  if (inv) {
-    let newStock = inv.stock
-    if (data.type === 'in' || data.type === 'return') newStock += data.quantity
-    else if (data.type === 'out' || data.type === 'damage') newStock = Math.max(0, newStock - data.quantity)
-    else if (data.type === 'correction') newStock = data.quantity
-    await db.inventory.update(key, { stock: newStock })
+      // Mirror the new stock level to Supabase
+      await supabase
+        .from('stock_levels')
+        .update({ stock: newStock })
+        .eq('product_id', data.product_id)
+        .eq('branch_id',  data.branch_id)
+    } catch {
+      // Supabase call failed â€” local Dexie is already updated.
+      // The next full cache pull (on reconnect) will reconcile server state.
+    }
   }
 
   const prod = await db.products.get(data.product_id)
-  const { data: { session } } = await supabase.auth.getSession()
-  const staffRow = session ? await db.staff.where('auth_id').equals(session.user.id).first() : null
-
   const adj: LocalAdjustment = {
     id: uuid(), product_id: data.product_id, product_name: prod?.name ?? data.product_id,
     type: data.type, quantity: data.quantity, reason: data.reason,
@@ -1255,12 +1325,12 @@ export async function apiCreateAdjustment(data: {
   localStorage.setItem(ADJ_KEY, JSON.stringify(adjs.slice(0, 200)))
 
   addLocalAudit('STOCK_ADJUSTMENT', staffRow?.name ?? 'System',
-    `${data.type.toUpperCase()} ${data.quantity} × ${prod?.name ?? data.product_id}: ${data.reason}`)
+    `${data.type.toUpperCase()} ${data.quantity} Ã— ${prod?.name ?? data.product_id}: ${data.reason}`)
 
   return adj
 }
 
-// ─── Backup (stubs — backup runs on web, not mobile) ─────────────────────────
+// â”€â”€â”€ Backup (stubs â€” backup runs on web, not mobile) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function apiGetAllTransactions() {
   return db.transactions.toArray()
@@ -1272,10 +1342,35 @@ export async function apiGetAllStaff() {
   return db.staff.toArray()
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-function _requireOnline() {
-  if (!navigator.onLine) {
+/**
+ * Checks real connectivity by testing if Supabase is reachable.
+ * navigator.onLine is unreliable on captive portals / local-network-only connections.
+ */
+async function _isReallyOnline(): Promise<boolean> {
+  // On Capacitor, use the Network plugin (already imported in sync.ts)
+  if (typeof navigator === 'undefined') return false
+  if (!navigator.onLine) return false
+  try {
+    const ctrl = new AbortController()
+    const tid = setTimeout(() => ctrl.abort(), 3000)
+    await fetch(
+      `${import.meta.env.VITE_SUPABASE_URL as string}/rest/v1/`,
+      { method: 'HEAD', signal: ctrl.signal,
+        headers: { apikey: import.meta.env.VITE_SUPABASE_ANON_KEY as string } },
+    )
+    clearTimeout(tid)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function _requireOnline() {
+  const online = await _isReallyOnline()
+  if (!online) {
     throw new Error('This action requires an internet connection. Please reconnect and try again.')
   }
 }
+

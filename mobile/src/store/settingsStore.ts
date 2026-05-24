@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 
 interface Category {
   id: string
@@ -58,28 +59,15 @@ interface SettingsState {
   applyVoucher: (code: string, orderTotal: number) => { valid: boolean; discount: number; message: string }
 }
 
-const DEFAULT_CATEGORIES: Category[] = [
-  { id: 'c1', name: 'Large Schoolbag', icon: 'LS', active: true },
-  { id: 'c2', name: 'Medium Schoolbag', icon: 'MS', active: true },
-  { id: 'c3', name: 'Super Large Schoolbag', icon: 'SL', active: true },
-  { id: 'c4', name: 'Lunch Bag', icon: 'LB', active: true },
-]
-
-const DEFAULT_VOUCHERS: Voucher[] = [
-  { id: 'v1', code: 'WELCOME10', type: 'percent', value: 10, minOrder: 200, maxUses: 100, usedCount: 12, active: true, expiry: '2024-12-31', description: '10% off for new customers' },
-  { id: 'v2', code: 'SAVE50', type: 'fixed', value: 50, minOrder: 500, maxUses: 50, usedCount: 8, active: true, expiry: '2024-06-30', description: '₱50 off orders above ₱500' },
-  { id: 'v3', code: 'SUMMER20', type: 'percent', value: 20, minOrder: 1000, maxUses: 30, usedCount: 30, active: false, expiry: '2024-03-31', description: 'Summer sale 20% off' },
-]
-
-export const useSettingsStore = create<SettingsState>((set, get) => ({
-  storeName: 'Ten Foundation Philippines Inc.',
-  address: '123 Katipunan Ave, Quezon City, Metro Manila',
-  phone: '+63 2 8123 4567',
-  email: 'info@tenfoundation.ph',
-  website: 'www.carryhopebags.com',
-  tin: '123-456-789-000',
-  receiptHeader: 'Ten Foundation Philippines Inc.',
-  receiptFooter: 'Thank you for your purchase! God bless you.',
+export const useSettingsStore = create<SettingsState>()(persist((set, get) => ({
+  storeName: '',
+  address: '',
+  phone: '',
+  email: '',
+  website: '',
+  tin: '',
+  receiptHeader: '',
+  receiptFooter: 'Thank you for your purchase!',
   receiptShowLogo: true,
   receiptShowTax: true,
   requirePinForDiscount: true,
@@ -94,10 +82,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   timezone: 'Asia/Manila',
   lowStockThreshold: 5,
   printerEnabled: false,
-  printerWidth: '80mm',
+  printerWidth: '58mm',
   language: 'en-PH',
-  categories: DEFAULT_CATEGORIES,
-  vouchers: DEFAULT_VOUCHERS,
+  categories: [],
+  vouchers: [],
 
   update: (patch) => set((s) => ({ ...s, ...patch })),
 
@@ -132,4 +120,4 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const discount = v.type === 'percent' ? orderTotal * (v.value / 100) : v.value
     return { valid: true, discount, message: `${v.description} — ₱${discount.toFixed(2)} off!` }
   },
-}))
+}), { name: 'tenpos-settings', version: 1 }))

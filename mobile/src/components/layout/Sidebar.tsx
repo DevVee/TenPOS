@@ -1,11 +1,12 @@
-import { Link, useNavigate, useLocation } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, ShoppingCart, Package, BarChart3,
   Users, Settings2, ClipboardList, ArrowLeftRight,
-  Shield, LogOut, ChevronDown, ChevronRight,
+  Shield, LogOut, ChevronDown, ChevronRight, Printer, AlertTriangle,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useAuthStore } from '../../store/authStore'
+import { useLogoutConfirm } from '../../hooks/useLogoutConfirm'
 import type { UserRole } from '../../types'
 
 interface NavItem {
@@ -21,6 +22,9 @@ const NAV: NavItem[] = [
   // GENERAL
   { label: 'Dashboard',      to: '/dashboard',    icon: LayoutDashboard, roles: ['admin', 'manager', 'viewer'],           section: 'GENERAL' },
   { label: 'POS Terminal',   to: '/pos',          icon: ShoppingCart,    roles: ['admin', 'manager', 'cashier'],           section: 'GENERAL' },
+  // Cashier-only shortcuts (admin/manager access these via Settings & Inventory sub-menus)
+  { label: 'Low Stock',      to: '/inventory/low-stock', icon: AlertTriangle, roles: ['cashier'],                         section: 'GENERAL' },
+  { label: 'Printer Setup',  to: '/settings/printer',    icon: Printer,       roles: ['cashier'],                         section: 'GENERAL' },
 
   // OPERATIONS
   { label: 'Transactions',   to: '/transactions', icon: ClipboardList,   roles: ['admin', 'manager', 'viewer'],            section: 'OPERATIONS' },
@@ -53,15 +57,16 @@ const NAV: NavItem[] = [
       { label: 'Categories', to: '/settings/categories' },
       { label: 'Vouchers',   to: '/settings/vouchers' },
       { label: 'Sync Log',   to: '/settings/sync-log' },
+      { label: 'Printer',    to: '/settings/printer' },
     ],
   },
   { label: 'Audit Log',      to: '/audit',        icon: Shield,          roles: ['admin'],                                 section: 'MANAGEMENT' },
 ]
 
 export function Sidebar({ collapsed }: { collapsed: boolean }) {
-  const { user, logout } = useAuthStore()
-  const navigate  = useNavigate()
+  const { user } = useAuthStore()
   const { pathname } = useLocation()
+  const { trigger: triggerLogout, modal: logoutModal } = useLogoutConfirm()
 
   const [openMenus, setOpenMenus] = useState<string[]>(['Inventory', 'Reports', 'Settings'])
 
@@ -71,8 +76,6 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
     setOpenMenus((prev) =>
       prev.includes(label) ? prev.filter((l) => l !== label) : [...prev, label]
     )
-
-  const handleLogout = () => { logout(); navigate('/login') }
 
   const isActive = (to: string): boolean => {
     if (to === '/inventory' || to === '/settings') return pathname === to
@@ -89,9 +92,12 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
   return (
     <aside
       className={`fixed top-0 left-0 h-screen flex flex-col z-30 transition-all duration-200 shadow-panel
-        ${collapsed ? 'w-[64px]' : 'w-[220px]'}`}
+        ${collapsed ? 'w-[64px]' : 'w-[240px]'}`}
       style={{ background: '#111318' }}
     >
+      {/* Safe-area spacer — pushes logo below Android/iOS status bar */}
+      <div style={{ height: 'env(safe-area-inset-top, 0px)', flexShrink: 0 }} />
+
       {/* ── Logo ──────────────────────────────────────────────────────────── */}
       <div
         className={`flex items-center h-14 flex-shrink-0 border-b ${collapsed ? 'justify-center px-0' : 'px-4 gap-3'}`}
@@ -249,17 +255,18 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
         )}
 
         <button
-          onClick={handleLogout}
-          title={collapsed ? 'Logout' : undefined}
+          onClick={triggerLogout}
+          title={collapsed ? 'Sign out' : undefined}
           className={`flex items-center gap-3 w-full px-3 py-2.5 text-sm transition-all duration-150
             hover:bg-red-500/10 group ${collapsed ? 'justify-center' : ''}`}
           style={{ color: '#6B7280' }}
         >
           <LogOut className="w-[18px] h-[18px] flex-shrink-0 group-hover:text-red-400 transition-colors" />
           {!collapsed && (
-            <span className="text-[13px] group-hover:text-red-400 transition-colors">Logout</span>
+            <span className="text-[13px] group-hover:text-red-400 transition-colors">Sign out</span>
           )}
         </button>
+        {logoutModal}
       </div>
     </aside>
   )

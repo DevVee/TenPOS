@@ -118,6 +118,7 @@ export function LowStock() {
 
           {/* Table view */}
           <div className="card overflow-hidden">
+            <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="table-head">
                 <tr>
@@ -181,6 +182,7 @@ export function LowStock() {
                 })}
               </tbody>
             </table>
+            </div>
           </div>
         </>
       )}

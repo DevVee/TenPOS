@@ -71,10 +71,10 @@ export function StatCard({
   const ic = ICON_STYLES[iconColor]
 
   return (
-    <div className="card p-5 hover:shadow-lift transition-shadow duration-200">
+    <div className="card p-3.5 sm:p-4 md:p-5 hover:shadow-lift transition-shadow duration-200">
 
       {/* Label row */}
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-2.5 md:mb-3">
         <div className="flex items-center gap-2">
           <p className="kpi-label">{label}</p>
           {live && (
@@ -92,7 +92,7 @@ export function StatCard({
       </div>
 
       {/* Value */}
-      <p className="text-[32px] font-extrabold text-gray-900 tabular-nums tracking-tight leading-none mb-2">
+      <p className="text-2xl sm:text-[28px] md:text-[32px] font-extrabold text-gray-900 tabular-nums tracking-tight leading-none mb-2">
         {value}
       </p>
 

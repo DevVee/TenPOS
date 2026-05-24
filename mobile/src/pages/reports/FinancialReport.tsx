@@ -5,6 +5,7 @@ import { PageHeader } from '../../components/ui/PageHeader'
 import { StatCard } from '../../components/ui/StatCard'
 import { apiFinancialReport } from '../../lib/api'
 import { useApiData } from '../../hooks/useApiData'
+import { useAuthStore } from '../../store/authStore'
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts'
 
 function fmt(n: number) { return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2 })}` }
@@ -21,16 +22,21 @@ interface FinancialData {
 }
 
 export function FinancialReport() {
+  const { user } = useAuthStore()
   const today = isoDate(new Date())
   const [dateFrom, setDateFrom] = useState(today)
   const [dateTo,   setDateTo]   = useState(today)
 
   const { data, loading } = useApiData<FinancialData>(
-    () => apiFinancialReport({
-      from: dateFrom + 'T00:00:00',
-      to:   dateTo   + 'T23:59:59',
-    }) as unknown as Promise<FinancialData>,
-    [dateFrom, dateTo]
+    () => {
+      const params: Record<string, string> = {
+        from: dateFrom + 'T00:00:00',
+        to:   dateTo   + 'T23:59:59',
+      }
+      if (user?.branch_id) params.branch_id = user.branch_id
+      return apiFinancialReport(params) as unknown as Promise<FinancialData>
+    },
+    [dateFrom, dateTo, user?.branch_id]
   )
 
   const payments      = Object.entries(data?.paymentBreakdown ?? {}).map(([method, total]) => ({ method, total }))
@@ -160,7 +166,7 @@ export function FinancialReport() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
             <StatCard label="Revenue"      value={fmt(data?.revenue ?? 0)}                    icon={DollarSign}  iconColor="emerald" />
             <StatCard label="Gross Profit" value={fmt(data?.gross_profit ?? 0)}               icon={TrendingUp}  iconColor="blue"    />
             <StatCard label="Gross Margin" value={`${data?.gross_margin ?? '0'}%`}             icon={TrendingUp}  iconColor="violet"  />

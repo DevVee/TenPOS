@@ -76,7 +76,7 @@ export function SyncLog() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="card px-4 py-4">
           <p className="text-xs text-gray-400 mb-1">Transactions</p>
           <p className="text-3xl font-black text-gray-700">{totalTx}</p>

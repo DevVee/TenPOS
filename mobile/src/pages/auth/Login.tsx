@@ -33,6 +33,13 @@ export function Login() {
     e.preventDefault()
     setError('')
     if (!username || !password) { setError('Enter your username and password to continue.'); return }
+
+    // Check connectivity before hitting the network
+    if (!navigator.onLine) {
+      setError('No internet connection. Please check your network and try again.')
+      return
+    }
+
     setLoading(true)
     try {
       const data = await apiLogin(username, password)
@@ -41,7 +48,15 @@ export function Login() {
       login({ id: me.id, name: me.name, email: me.email, role: me.role as UserRole, avatarInitials: initials, branch: me.branch_name ?? 'Unknown Branch', branch_id: me.branch_id })
       navigate(me.role === 'cashier' ? '/pos' : '/dashboard')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Incorrect username or password.')
+      // Distinguish network errors from auth errors
+      const isNetworkErr = !navigator.onLine || (
+        err instanceof Error && /fetch|network|failed to fetch|load/i.test(err.message)
+      )
+      setError(
+        isNetworkErr
+          ? 'No internet connection. Please check your network and try again.'
+          : (err instanceof Error ? err.message : 'Incorrect username or password.')
+      )
     } finally {
       setLoading(false)
     }

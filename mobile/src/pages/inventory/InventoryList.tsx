@@ -1,5 +1,5 @@
-﻿import { useState, useRef, useEffect } from 'react'
-import { Search, Plus, Download, Upload, Loader2, Package, AlertTriangle, Layers } from 'lucide-react'
+﻿import { useState, useEffect } from 'react'
+import { Search, Plus, Download, Loader2, Package, AlertTriangle, Layers } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Badge } from '../../components/ui/Badge'
 import { PageHeader } from '../../components/ui/PageHeader'
@@ -7,6 +7,7 @@ import { EmptyState } from '../../components/ui/EmptyState'
 import { apiGetInventory } from '../../lib/api'
 import { useApiData } from '../../hooks/useApiData'
 import { onSyncEvent } from '../../lib/sync'
+import { useAuthStore } from '../../store/authStore'
 import { downloadXLSX } from '../../lib/xlsxExport'
 
 function fmt(n: number) { return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2 })}` }
@@ -44,14 +45,14 @@ function StockBar({ stock, reorder }: { stock: number; reorder: number }) {
 
 export function InventoryList() {
   const navigate  = useNavigate()
-  const importRef = useRef<HTMLInputElement>(null)
+  const { user }  = useAuthStore()
   const [search,    setSearch]    = useState('')
   const [category,  setCategory]  = useState('All')
   const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'out'>('all')
-  const [importMsg, setImportMsg] = useState('')
 
   const { data, loading, error, refetch } = useApiData<InventoryItem[]>(
-    () => apiGetInventory() as Promise<InventoryItem[]>
+    () => apiGetInventory(user?.branch_id ?? undefined) as Promise<InventoryItem[]>,
+    [user?.branch_id]
   )
 
   useEffect(() => {
@@ -110,14 +111,6 @@ export function InventoryList() {
     )
   }
 
-  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setImportMsg(`"${file.name}" received — CSV import coming soon.`)
-    setTimeout(() => setImportMsg(''), 4000)
-    e.target.value = ''
-  }
-
   return (
     <div>
       <PageHeader
@@ -125,10 +118,6 @@ export function InventoryList() {
         subtitle={loading ? 'Loading…' : `${products.length} products · Stock value ${fmt(stockValue)}`}
         actions={
           <div className="flex gap-2">
-            <input ref={importRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleImportFile} />
-            <button onClick={() => importRef.current?.click()} className="btn-secondary">
-              <Upload className="w-3.5 h-3.5" /> Import
-            </button>
             <button onClick={handleExport} className="btn-secondary">
               <Download className="w-3.5 h-3.5" /> Export
             </button>
@@ -143,69 +132,66 @@ export function InventoryList() {
       {error && (
         <div className="mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-100 text-sm text-red-600">{error}</div>
       )}
-      {importMsg && (
-        <div className="mb-4 px-4 py-3 rounded-lg bg-blue-50 border border-blue-100 text-sm text-blue-700">{importMsg}</div>
-      )}
 
       {/* KPI strip */}
-      <div className="grid grid-cols-3 gap-3 mb-5">
-        <div className="card p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
-              <Package className="w-4 h-4 text-gray-500" />
+      <div className="grid grid-cols-3 gap-2.5 sm:gap-3 md:gap-4 mb-4 md:mb-5">
+        <div className="card p-3 sm:p-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:gap-3">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0 mb-2 sm:mb-0">
+              <Package className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-500" />
             </div>
             <div>
-              <p className="text-xl font-bold text-gray-900 leading-none">{products.length}</p>
-              <p className="text-xs text-gray-400 mt-0.5">Total Products</p>
+              <p className="text-lg sm:text-xl font-bold text-gray-900 leading-none">{products.length}</p>
+              <p className="text-[11px] sm:text-xs text-gray-400 mt-0.5">Products</p>
             </div>
           </div>
         </div>
-        <div className="card p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center flex-shrink-0">
-              <AlertTriangle className="w-4 h-4 text-amber-500" />
+        <div className="card p-3 sm:p-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:gap-3">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-amber-50 flex items-center justify-center flex-shrink-0 mb-2 sm:mb-0">
+              <AlertTriangle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-500" />
             </div>
             <div>
-              <p className="text-xl font-bold text-amber-600 leading-none">{lowStockCount}</p>
-              <p className="text-xs text-gray-400 mt-0.5">Low Stock</p>
+              <p className="text-lg sm:text-xl font-bold text-amber-600 leading-none">{lowStockCount}</p>
+              <p className="text-[11px] sm:text-xs text-gray-400 mt-0.5">Low Stock</p>
             </div>
           </div>
         </div>
-        <div className="card p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
-              <Layers className="w-4 h-4 text-gray-500" />
+        <div className="card p-3 sm:p-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:gap-3">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0 mb-2 sm:mb-0">
+              <Layers className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-500" />
             </div>
             <div>
-              <p className="text-xl font-bold text-gray-900 leading-none">
+              <p className="text-lg sm:text-xl font-bold text-gray-900 leading-none">
                 {products.reduce((s, p) => s + Number(p.stock), 0)}
               </p>
-              <p className="text-xs text-gray-400 mt-0.5">Total Units</p>
+              <p className="text-[11px] sm:text-xs text-gray-400 mt-0.5">Total Units</p>
             </div>
           </div>
         </div>
       </div>
 
       {/* Filter bar */}
-      <div className="flex flex-wrap items-center gap-3 mb-4">
+      <div className="flex flex-col gap-2.5 mb-4">
         {/* Search */}
-        <div className="relative flex-1 min-w-[200px]">
+        <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
           <input
-            className="input-base pl-9"
+            className="input-base pl-9 w-full"
             placeholder="Search by name or SKU…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
 
-        {/* Category pills */}
-        <div className="flex gap-1.5 flex-wrap">
+        {/* Category pills — horizontal scroll on mobile */}
+        <div className="flex gap-1.5 overflow-x-auto pb-0.5" style={{ scrollbarWidth: 'none' }}>
           {categories.map((c) => (
             <button
               key={c}
               onClick={() => setCategory(c)}
-              className={`h-9 px-3 rounded-lg text-xs font-medium transition-colors ${
+              className={`flex-shrink-0 h-9 px-3 rounded-lg text-xs font-medium transition-colors ${
                 category === c
                   ? 'bg-brand text-white'
                   : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
@@ -214,15 +200,13 @@ export function InventoryList() {
               {c}
             </button>
           ))}
-        </div>
-
-        {/* Stock filter */}
-        <div className="flex gap-1.5">
-          {([['all', 'All'], ['low', 'Low Stock'], ['out', 'Out of Stock']] as const).map(([v, label]) => (
+          {/* Stock filter — inline after category pills */}
+          <div className="w-px bg-gray-200 flex-shrink-0 mx-1" />
+          {([['all', 'All Stock'], ['low', 'Low Stock'], ['out', 'Out of Stock']] as const).map(([v, label]) => (
             <button
               key={v}
               onClick={() => setStockFilter(v)}
-              className={`h-9 px-3 rounded-lg text-xs font-medium transition-colors ${
+              className={`flex-shrink-0 h-9 px-3 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
                 stockFilter === v
                   ? 'bg-gray-800 text-white'
                   : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'

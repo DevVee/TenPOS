@@ -1,8 +1,11 @@
-﻿import { useState } from 'react'
+﻿import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, CreditCard, Banknote, Smartphone, Check, Tag, X, AlertCircle, Loader2 } from 'lucide-react'
 import { usePOSStore } from '../../store/posStore'
 import { useAuthStore } from '../../store/authStore'
+import { usePrinterStore } from '../../store/printerStore'
+import { Capacitor } from '@capacitor/core'
+import { App as CapApp } from '@capacitor/app'
 import { apiValidateVoucher } from '../../lib/api'
 import type { Payment as PaymentType } from '../../types'
 
@@ -23,6 +26,13 @@ export function Payment() {
   const navigate = useNavigate()
   const { cart, cartSubtotal } = usePOSStore()
   const { user } = useAuthStore()
+  const { savedDevice, autoprint } = usePrinterStore()
+
+  // Auto-print only when a BT printer is configured AND autoprint is on.
+  // On web (no native BT) we never auto-invoke the browser print popup.
+  const shouldAutoPrint = Capacitor.isNativePlatform()
+    ? (!!savedDevice && autoprint)
+    : false
 
   const subtotal  = cartSubtotal()
   const baseTotal = subtotal
@@ -35,6 +45,16 @@ export function Payment() {
   const [voucherLoading, setVoucherLoading] = useState(false)
   const [processing, setProcessing] = useState(false)
   const [checkoutError, setCheckoutError] = useState('')
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false)
+
+  // MOBILE-03: Android hardware back button — show confirm before leaving payment
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return
+    const listener = CapApp.addListener('backButton', () => {
+      if (!processing) setShowLeaveConfirm(true)
+    })
+    return () => { void listener.then((h) => h.remove()) }
+  }, [processing])
 
   const voucherDiscount = voucherResult?.valid ? voucherResult.discount : 0
   const total           = Math.max(0, baseTotal - voucherDiscount)
@@ -79,10 +99,13 @@ export function Payment() {
       )
       navigate(`/pos/receipt/${result.id}`, {
         state: {
+          autoPrint: shouldAutoPrint,
           transaction: {
-            receiptNo: result.receipt_no,
-            offline: result.offline,
-            branchName: user?.branch,
+            receiptNo:    result.receipt_no,
+            offline:      result.offline,
+            branchName:   user?.branch,
+            cashierName:  user?.name ?? undefined,
+            createdAt:    new Date().toISOString(),
             items: cart.map((i) => ({
               name: i.product.name,
               qty: i.quantity,
@@ -110,10 +133,39 @@ export function Payment() {
 
   return (
     <div className="min-h-screen bg-[#F5F5F7]">
+
+      {/* MOBILE-03: Leave payment confirmation */}
+      {showLeaveConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowLeaveConfirm(false)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-xs p-6 z-10 text-center">
+            <h3 className="text-base font-bold text-gray-900 mb-2">Leave Payment?</h3>
+            <p className="text-sm text-gray-500 mb-5">Your cart items will be preserved, but payment details will be cleared.</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowLeaveConfirm(false)}
+                className="flex-1 h-11 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all"
+              >
+                Stay
+              </button>
+              <button
+                onClick={() => navigate('/pos')}
+                className="flex-1 h-11 rounded-xl bg-brand text-white text-sm font-semibold hover:bg-brand-dark transition-all"
+              >
+                Leave
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-white border-b border-gray-100 shadow-sm">
         <div className="max-w-5xl mx-auto px-4 h-14 flex items-center gap-3">
-          <button onClick={() => navigate('/pos')} className="p-2 rounded-xl hover:bg-gray-100 text-gray-500 transition-colors">
+          <button
+            onClick={() => setShowLeaveConfirm(true)}
+            className="p-2 rounded-xl hover:bg-gray-100 text-gray-500 transition-colors"
+          >
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
@@ -262,7 +314,6 @@ export function Payment() {
                     value={cashInput}
                     onChange={(e) => setCashInput(e.target.value)}
                     placeholder="0.00"
-                    autoFocus
                   />
                 </div>
 
@@ -272,14 +323,14 @@ export function Payment() {
                     <button
                       key={v}
                       onClick={() => setCashInput(String(v))}
-                      className="px-4 py-2.5 rounded-xl bg-gray-100 text-sm font-bold text-gray-700 hover:bg-gray-200 transition-colors"
+                      className="px-4 py-3 rounded-xl bg-gray-100 text-sm font-bold text-gray-700 hover:bg-gray-200 transition-colors"
                     >
                       ₱{v.toLocaleString()}
                     </button>
                   ))}
                   <button
                     onClick={() => setCashInput(String(Math.ceil(total)))}
-                    className="px-4 py-2.5 rounded-xl bg-brand-pale text-sm font-bold text-brand hover:bg-red-100 transition-colors"
+                    className="px-4 py-3 rounded-xl bg-brand-pale text-sm font-bold text-brand hover:bg-red-100 transition-colors"
                   >
                     Exact
                   </button>

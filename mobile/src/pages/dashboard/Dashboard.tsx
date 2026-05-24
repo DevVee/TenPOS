@@ -10,6 +10,7 @@ import { EmptyState } from '../../components/ui/EmptyState'
 import { useNavigate } from 'react-router-dom'
 import { apiSalesReport, apiGetTransactions, apiGetLowStock } from '../../lib/api'
 import { onSyncEvent } from '../../lib/sync'
+import { useAuthStore } from '../../store/authStore'
 import { subscribeTransactions, subscribeStock } from '../../lib/realtime'
 import {
   ResponsiveContainer, XAxis, YAxis, CartesianGrid,
@@ -71,6 +72,7 @@ function stockPct(item: LowStockItem) {
 
 export function Dashboard() {
   const navigate = useNavigate()
+  const { user } = useAuthStore()
   const today     = new Date().toISOString().slice(0, 10)
   const yesterday = new Date(Date.now() - 864e5).toISOString().slice(0, 10)
 
@@ -82,10 +84,11 @@ export function Dashboard() {
 
   const load = useCallback(async () => {
     try {
+      const branchParam: Record<string, string> = user?.branch_id ? { branch_id: user.branch_id } : {}
       const [sales, yest, txns, ls] = await Promise.all([
-        apiSalesReport({ from: today     + 'T00:00:00', to: today     + 'T23:59:59' }) as Promise<SalesData>,
-        apiSalesReport({ from: yesterday + 'T00:00:00', to: yesterday + 'T23:59:59' }) as Promise<SalesData>,
-        apiGetTransactions({ limit: '6', sort: 'desc' }) as Promise<{ data: Transaction[] }>,
+        apiSalesReport({ from: today     + 'T00:00:00', to: today     + 'T23:59:59', ...branchParam }) as Promise<SalesData>,
+        apiSalesReport({ from: yesterday + 'T00:00:00', to: yesterday + 'T23:59:59', ...branchParam }) as Promise<SalesData>,
+        apiGetTransactions({ limit: '6', sort: 'desc', ...branchParam }) as Promise<{ data: Transaction[] }>,
         apiGetLowStock() as Promise<LowStockItem[]>,
       ])
       setSalesData(sales)
@@ -94,7 +97,7 @@ export function Dashboard() {
       setLowStock(Array.isArray(ls) ? ls.slice(0, 5) : [])
     } catch { /* silent */ }
     finally { setLoading(false) }
-  }, [today, yesterday])
+  }, [today, yesterday, user?.branch_id])
 
   useEffect(() => { load() }, [load])
 
@@ -154,7 +157,7 @@ export function Dashboard() {
       ) : (
         <>
           {/* ── Row 1: KPI strip ──────────────────────────────────────────── */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-5 mb-5 md:mb-7">
             <StatCard
               label="Today's Revenue"
               value={s ? fmt(Number(s.total_revenue)) : '—'}
@@ -196,10 +199,10 @@ export function Dashboard() {
           </div>
 
           {/* ── Row 2: Chart + Top Products ───────────────────────────────── */}
-          <div className="grid lg:grid-cols-3 gap-4 mb-4">
+          <div className="grid lg:grid-cols-3 gap-3 sm:gap-4 md:gap-5 mb-4 md:mb-6">
 
             {/* Revenue chart — 2/3 */}
-            <div className="card-elevated p-5 lg:col-span-2">
+            <div className="card-elevated p-4 sm:p-5 lg:col-span-2">
               <div className="flex items-center justify-between mb-5">
                 <div>
                   <p className="text-sm font-semibold text-gray-800">Revenue This Week</p>
@@ -300,7 +303,7 @@ export function Dashboard() {
           </div>
 
           {/* ── Row 3: Transactions + Low Stock ───────────────────────────── */}
-          <div className="grid lg:grid-cols-3 gap-4">
+          <div className="grid lg:grid-cols-3 gap-3 sm:gap-4 md:gap-5">
 
             {/* Recent transactions — 2/3 */}
             <div className="card overflow-hidden lg:col-span-2">
@@ -322,6 +325,7 @@ export function Dashboard() {
                   compact
                 />
               ) : (
+                <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead className="table-head">
                     <tr>
@@ -358,6 +362,7 @@ export function Dashboard() {
                     ))}
                   </tbody>
                 </table>
+                </div>
               )}
             </div>
 

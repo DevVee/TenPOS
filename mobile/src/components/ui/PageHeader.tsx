@@ -8,13 +8,13 @@ interface PageHeaderProps {
 
 export function PageHeader({ title, subtitle, actions, compact = false }: PageHeaderProps) {
   return (
-    <div className={`flex items-start justify-between gap-4 ${compact ? 'mb-4' : 'mb-6'}`}>
-      <div>
-        <h1 className={`font-bold text-gray-900 tracking-tight leading-tight ${compact ? 'text-xl' : 'text-2xl'}`}>
+    <div className={`flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2.5 ${compact ? 'mb-4 md:mb-5' : 'mb-5 md:mb-7'}`}>
+      <div className="min-w-0">
+        <h1 className={`font-bold text-gray-900 tracking-tight leading-tight ${compact ? 'text-lg sm:text-xl' : 'text-xl sm:text-2xl'}`}>
           {title}
         </h1>
         {subtitle && (
-          <p className="text-sm text-gray-500 mt-0.5 font-normal">{subtitle}</p>
+          <p className="text-xs sm:text-sm text-gray-500 mt-0.5 font-normal leading-snug">{subtitle}</p>
         )}
       </div>
       {actions && (

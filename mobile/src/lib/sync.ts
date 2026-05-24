@@ -84,17 +84,28 @@ function emit(event: SyncEvent) {
 
 // ─── Pull: Supabase → Dexie ───────────────────────────────────────────────────
 
+const PRODUCT_PAGE = 200   // rows per paginated request
+
 export async function refreshProductCache(): Promise<CachedProduct[]> {
   try {
-    const { data, error } = await supabase
-      .from('products')
-      .select('id, sku, barcode, name, category_id, price, cost, image_url, active, categories(name), product_variants(id, label, value, price_adjustment)')
-      .eq('active', true)
-      .order('name')
-      .limit(500)
+    // Paginated fetch — avoids 500-item hard cap for larger catalogues
+    let from = 0
+    const allRaw: Record<string, unknown>[] = []
+    for (;;) {
+      const { data, error } = await supabase
+        .from('products')
+        .select('id, sku, barcode, name, category_id, price, cost, image_url, active, description, brand, material, color, weight_grams, length_cm, width_cm, height_cm, tags, notes, categories(name), product_variants(id, label, value, price_adjustment)')
+        .eq('active', true)
+        .order('name')
+        .range(from, from + PRODUCT_PAGE - 1)
+      if (error) throw error
+      const page = (data ?? []) as Record<string, unknown>[]
+      allRaw.push(...page)
+      if (page.length < PRODUCT_PAGE) break
+      from += PRODUCT_PAGE
+    }
 
-    if (error) throw error
-
+    const data = allRaw
     const products: CachedProduct[] = ((data ?? []) as Record<string, unknown>[]).map((p) => ({
       id:            p.id as string,
       sku:           p.sku as string,
@@ -108,6 +119,17 @@ export async function refreshProductCache(): Promise<CachedProduct[]> {
       active:        Boolean(p.active),
       variants:      (p.product_variants as { id: string; label: string; value: string; price_adjustment: number }[]) ?? [],
       cached_at:     Date.now(),
+      // Extended fields — stored for offline ProductDetail view
+      description:   (p.description  as string | null) ?? undefined,
+      brand:         (p.brand        as string | null) ?? undefined,
+      material:      (p.material     as string | null) ?? undefined,
+      color:         (p.color        as string | null) ?? undefined,
+      weight_grams:  p.weight_grams  != null ? Number(p.weight_grams)  : undefined,
+      length_cm:     p.length_cm     != null ? Number(p.length_cm)     : undefined,
+      width_cm:      p.width_cm      != null ? Number(p.width_cm)      : undefined,
+      height_cm:     p.height_cm     != null ? Number(p.height_cm)     : undefined,
+      tags:          Array.isArray(p.tags) ? (p.tags as string[]) : undefined,
+      notes:         (p.notes        as string | null) ?? undefined,
     }))
 
     await db.products.bulkPut(products)
@@ -178,15 +200,15 @@ export async function refreshVouchersCache(): Promise<CachedVoucher[]> {
   try {
     const { data, error } = await supabase
       .from('vouchers')
-      .select('id, code, type, value, min_purchase, max_uses, used_count, active, expires_at')
+      .select('id, code, discount_type, discount_value, min_purchase, max_uses, used_count, active, expires_at')
       .eq('active', true)
     if (error) throw error
 
     const vouchers: CachedVoucher[] = ((data ?? []) as Record<string, unknown>[]).map((v) => ({
       id:             v.id as string,
       code:           v.code as string,
-      discount_type:  v.type as 'percent' | 'fixed',
-      discount_value: Number(v.value),
+      discount_type:  v.discount_type as 'percent' | 'fixed',
+      discount_value: Number(v.discount_value),
       min_purchase:   Number(v.min_purchase ?? 0),
       max_uses:       Number(v.max_uses ?? 9999),
       used_count:     Number(v.used_count ?? 0),
@@ -300,17 +322,25 @@ export async function refreshTransactionCache(limitDays = 30): Promise<void> {
 
 // ─── Full pull: run all caches ────────────────────────────────────────────────
 
+let _pullInFlight = false   // HIGH-06: prevent concurrent pull race conditions
+
 export async function pullAll(branchId?: string): Promise<void> {
+  if (_pullInFlight) return   // timer + network-reconnect may fire simultaneously
+  _pullInFlight = true
   emit('sync:start')
-  await Promise.all([
-    refreshProductCache(),
-    refreshInventoryCache(branchId),
-    refreshCategoriesCache(),
-    refreshVouchersCache(),
-    refreshStaffCache(),
-    refreshTransactionCache(30),
-  ])
-  emit('sync:done')
+  try {
+    await Promise.all([
+      refreshProductCache(),
+      refreshInventoryCache(branchId),
+      refreshCategoriesCache(),
+      refreshVouchersCache(),
+      refreshStaffCache(),
+      refreshTransactionCache(30),
+    ])
+    emit('sync:done')
+  } finally {
+    _pullInFlight = false
+  }
 }
 
 // ─── Push: submit transaction ─────────────────────────────────────────────────
@@ -370,7 +400,7 @@ export async function submitTransaction(
       return { id: result.id, receipt_no: result.receipt_no, offline: false }
     } catch (err) {
       // Fall through to offline queue if RPC fails
-      console.warn('[TenPOS] Online submit failed, queuing offline:', err)
+      appendSyncLog({ timestamp: Date.now(), type: 'failed', detail: `Online submit fell back offline: ${(err as Error).message}` })
     }
   }
 
@@ -565,9 +595,40 @@ let _syncRunning = false
 // Native Capacitor network listener handle (Android only)
 let _nativeNetworkListener: { remove: () => Promise<void> } | null = null
 
+async function _syncAuditLog(): Promise<void> {
+  const AUDIT_KEY = 'tenpos_mobile_audit'
+  try {
+    type AuditEntry = { id: string; action: string; user: string; details: string; ip: string; timestamp: string; severity: 'info' | 'warning' | 'critical'; synced?: boolean }
+    const entries: AuditEntry[] = JSON.parse(localStorage.getItem(AUDIT_KEY) ?? '[]')
+    const unsynced = entries.filter((e) => !e.synced)
+    if (unsynced.length === 0) return
+
+    const { data: { session } } = await supabase.auth.getSession()
+    const staffRow = session ? await db.staff.where('auth_id').equals(session.user.id).first() : null
+
+    const rows = unsynced.map((e) => ({
+      branch_id: staffRow?.branch_id ?? null,
+      staff_id:  staffRow?.id ?? null,
+      action:    e.action,
+      details:   e.details,
+      severity:  e.severity,
+      ip:        'mobile',
+    }))
+
+    const { error } = await supabase.from('audit_log').insert(rows)
+    if (!error) {
+      const updated = entries.map((e) =>
+        unsynced.find((u) => u.id === e.id) ? { ...e, synced: true } : e
+      )
+      localStorage.setItem(AUDIT_KEY, JSON.stringify(updated.slice(0, 200)))
+    }
+  } catch { /* non-critical — local log remains valid */ }
+}
+
 async function _onOnline() {
   appendSyncLog({ timestamp: Date.now(), type: 'info', detail: 'Back online — flushing queue & refreshing cache' })
   await flushOfflineQueue()
+  await _syncAuditLog()
   await pullAll()
 }
 

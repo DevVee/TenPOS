@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { CartItem, Product, ProductVariant, Payment } from '../types'
 import { submitTransaction } from '../lib/sync'
+import { db } from '../lib/db'
 
 interface TransactionResult {
   receipt_no: string
@@ -40,18 +41,26 @@ interface POSState {
 export const usePOSStore = create<POSState>((set, get) => ({
   cart: [],
   searchQuery: '',
-  syncStatus: 'online',
+  syncStatus: 'offline',   // UX-03: start pessimistic; SyncBootstrap sets real status on first check
   pendingCount: 0,
   lastTransactionId: null,
 
   addToCart: (product, variant) => set((state) => {
+    const variantId = variant?.id
     const existing = state.cart.find(
-      (i) => i.product.id === product.id && i.variant?.id === variant?.id
+      (i) => i.product.id === product.id && i.variant?.id === variantId
     )
+    const currentQty = existing?.quantity ?? 0
+
+    // Prevent adding more than available stock (0-stock items blocked at UI level too)
+    if (product.stock > 0 && currentQty >= product.stock) {
+      return state // silently block — UI already shows the stock badge
+    }
+
     if (existing) {
       return {
         cart: state.cart.map((i) =>
-          i.product.id === product.id && i.variant?.id === variant?.id
+          i.product.id === product.id && i.variant?.id === variantId
             ? { ...i, quantity: i.quantity + 1 }
             : i
         ),
@@ -108,6 +117,19 @@ export const usePOSStore = create<POSState>((set, get) => ({
   checkoutCart: async (branchId, payments, discountAmount, voucherCode) => {
     const { cart } = get()
     if (!cart.length) throw new Error('Cart is empty')
+
+    // Re-validate stock against current Dexie cache before submitting
+    for (const item of cart) {
+      const variantId = item.variant?.id
+      const invKey = `${item.product.id}_${variantId ?? 'base'}_${branchId}`
+      const inv = await db.inventory.get(invKey)
+      const available = inv?.stock ?? item.product.stock
+      if (available < item.quantity) {
+        throw new Error(
+          `"${item.product.name}" only has ${available} in stock (you requested ${item.quantity}). Please reduce the quantity.`
+        )
+      }
+    }
 
     const payload = {
       branch_id: branchId,

@@ -1,6 +1,6 @@
 import { Clock, TrendingUp, ShoppingBag, DollarSign, LogOut, Loader2 } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore'
+import { useLogoutConfirm } from '../../hooks/useLogoutConfirm'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatCard } from '../../components/ui/StatCard'
 import { Badge } from '../../components/ui/Badge'
@@ -18,8 +18,8 @@ interface Txn {
 }
 
 export function ShiftSummary() {
-  const { user, logout } = useAuthStore()
-  const navigate         = useNavigate()
+  const { user } = useAuthStore()
+  const { trigger: triggerLogout, modal: logoutModal } = useLogoutConfirm()
 
   const today = new Date().toISOString().slice(0, 10)
 
@@ -47,18 +47,14 @@ export function ShiftSummary() {
     ? `${Math.floor(shiftMins / 60)}h ${shiftMins % 60}m`
     : '—'
 
-  const handleEndShift = () => {
-    logout()
-    navigate('/login')
-  }
-
   return (
     <div className="max-w-2xl mx-auto">
+      {logoutModal}
       <PageHeader
         title="My Shift Summary"
         subtitle={`${user?.name} · ${new Date().toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric' })}`}
         actions={
-          <button onClick={handleEndShift} className="btn-secondary flex items-center gap-1.5 text-red-600 border-red-200 hover:bg-red-50">
+          <button onClick={triggerLogout} className="btn-secondary flex items-center gap-1.5 text-red-600 border-red-200 hover:bg-red-50">
             <LogOut className="w-4 h-4" /> End Shift
           </button>
         }
@@ -126,6 +122,7 @@ export function ShiftSummary() {
             {txns.length === 0 ? (
               <div className="py-8 text-center text-sm text-gray-400">No transactions yet today</div>
             ) : (
+              <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-gray-50">
                   <tr>
@@ -152,6 +149,7 @@ export function ShiftSummary() {
                   ))}
                 </tbody>
               </table>
+              </div>
             )}
           </div>
         </>

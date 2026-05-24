@@ -6,6 +6,7 @@ import { StatCard } from '../../components/ui/StatCard'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { apiSalesReport } from '../../lib/api'
 import { useApiData } from '../../hooks/useApiData'
+import { useAuthStore } from '../../store/authStore'
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area,
@@ -65,19 +66,22 @@ const PERIOD_LABELS: Record<Period, string> = {
 }
 
 export function SalesReport() {
+  const { user } = useAuthStore()
   const [period, setPeriod]         = useState<Period>('week')
   const [customFrom, setCustomFrom] = useState(isoDate(new Date(Date.now() - 7 * 86400000)))
   const [customTo, setCustomTo]     = useState(isoDate(new Date()))
   const [category, setCategory]     = useState('All')
 
-  const queryDates = useMemo(() => {
-    if (period === 'custom') return { from: customFrom + 'T00:00:00', to: customTo + 'T23:59:59' }
-    return presetDates(period)
-  }, [period, customFrom, customTo])
+  const queryParams = useMemo(() => {
+    const dates = period === 'custom'
+      ? { from: customFrom + 'T00:00:00', to: customTo + 'T23:59:59' }
+      : presetDates(period)
+    return user?.branch_id ? { ...dates, branch_id: user.branch_id } : dates
+  }, [period, customFrom, customTo, user?.branch_id])
 
   const { data, loading } = useApiData<SalesData>(
-    () => apiSalesReport(queryDates) as Promise<SalesData>,
-    [queryDates]
+    () => apiSalesReport(queryParams) as Promise<SalesData>,
+    [queryParams]
   )
 
   const summary      = data?.summary
@@ -233,7 +237,7 @@ export function SalesReport() {
       ) : (
         <>
           {/* KPI strip */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
             <StatCard label="Total Revenue"    value={fmt(totalRevenue)}  icon={DollarSign}  iconColor="emerald" />
             <StatCard label="Transactions"     value={String(totalTxns)}  icon={ShoppingBag} iconColor="blue"    />
             <StatCard

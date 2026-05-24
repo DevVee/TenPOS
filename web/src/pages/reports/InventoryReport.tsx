@@ -231,7 +231,7 @@ export function InventoryReport() {
           </div>
 
           {/* ── Filters bar ─────────────────────────────────────────────────── */}
-          <div className=”no-print flex flex-wrap gap-2 mb-3”>
+          <div className="no-print flex flex-wrap gap-2 mb-3">
             {/* Search */}
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
@@ -239,7 +239,7 @@ export function InventoryReport() {
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search product or SKUâ€¦"
+                placeholder="Search product or SKU..."
                 className="input-base pl-8 py-1.5 text-sm w-full"
               />
             </div>

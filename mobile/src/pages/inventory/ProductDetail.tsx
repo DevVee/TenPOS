@@ -252,6 +252,7 @@ export function ProductDetail() {
         {movements.length === 0 ? (
           <div className="py-8 text-center text-sm text-gray-400">No stock movements yet</div>
         ) : (
+          <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
@@ -285,6 +286,7 @@ export function ProductDetail() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

@@ -4,7 +4,6 @@
 // Pages import from here unchanged — only this file changed.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { createClient } from '@supabase/supabase-js'
 import { supabase } from './supabase'
 
 // ─── Supabase session helpers (synchronous token read) ───────────────────────
@@ -14,17 +13,9 @@ const _supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string) ?? ''
 const PROJECT_REF  = _supabaseUrl.split('//')[1]?.split('.')[0] ?? ''
 const SESSION_KEY  = `sb-${PROJECT_REF}-auth-token`
 
-/**
- * Admin Supabase client using the service role key.
- * Used ONLY for staff creation via auth.admin.createUser() so that:
- *  - Email confirmation is bypassed (email_confirm: true)
- *  - The admin's active session in localStorage is never replaced
- */
-const _adminClient = createClient(
-  import.meta.env.VITE_SUPABASE_URL as string,
-  import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY as string,
-  { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } },
-)
+// NOTE: The Supabase service role key is NOT used here.
+// Staff creation/deletion is routed through the Edge Function
+// (supabase/functions/create-staff) which holds the key server-side.
 
 export const BASE_URL = 'supabase'
 
@@ -72,9 +63,12 @@ interface StaffRow {
 }
 
 let _currentStaff: StaffRow | null = null
+let _currentStaffAt = 0
+const STAFF_TTL = 5 * 60 * 1000   // MEDIUM-04: 5-minute TTL
 
 async function getCurrentStaff(): Promise<StaffRow | null> {
-  if (_currentStaff) return _currentStaff
+  // Return cached value if still fresh (< 5 minutes old)
+  if (_currentStaff && Date.now() - _currentStaffAt < STAFF_TTL) return _currentStaff
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
   const { data } = await supabase
@@ -82,7 +76,8 @@ async function getCurrentStaff(): Promise<StaffRow | null> {
     .select('id, name, email, role, branch_id, status, sales_count')
     .eq('auth_id', user.id)
     .maybeSingle()
-  _currentStaff = data as StaffRow | null
+  _currentStaff   = data as StaffRow | null
+  _currentStaffAt = Date.now()
   return _currentStaff
 }
 
@@ -1187,16 +1182,22 @@ export async function apiCreateStaff(data: Record<string, unknown>) {
     throw new Error('A password of at least 8 characters is required to create a staff account.')
   }
 
-  // 1. Create the Supabase Auth user via the admin client (service role).
-  //    email_confirm: true bypasses the email confirmation flow so the
-  //    account is immediately active — no waiting for an inbox.
-  const { data: authData, error: signUpErr } = await _adminClient.auth.admin.createUser({
-    email,
-    password,
-    email_confirm: true,
+  // 1. Call the Edge Function — service role key stays server-side, out of browser bundle.
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) throw new Error('Not authenticated')
+
+  const fnUrl = `${_supabaseUrl}/functions/v1/create-staff`
+  const fnRes = await fetch(fnUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({ email, password }),
   })
-  if (signUpErr) throw new Error(`Auth error: ${signUpErr.message}`)
-  const authId = authData.user?.id
+  const fnBody = await fnRes.json() as { auth_id?: string; error?: string }
+  if (!fnRes.ok) throw new Error(fnBody.error ?? `Auth error (${fnRes.status})`)
+  const authId = fnBody.auth_id
   if (!authId) throw new Error('Failed to create auth account — no user ID returned.')
 
   // 2. Insert the staff row with the new auth_id
@@ -1213,10 +1214,13 @@ export async function apiCreateStaff(data: Record<string, unknown>) {
     .select('*').single()
 
   if (error) {
-    // The auth user was created but the staff row failed — delete the
-    // orphaned auth account using the admin client to prevent ghost users.
-    try { await _adminClient.auth.admin.deleteUser(authId) } catch { /* best effort */ }
-    throw new Error(`Auth account created but staff profile failed: ${error.message}. The auth user may need manual cleanup.`)
+    // Auth user was created but staff row failed — delete the orphaned auth account via Edge Function
+    void fetch(fnUrl, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ auth_id: authId }),
+    }).catch(() => {/* best effort cleanup */})
+    throw new Error(`Staff profile creation failed: ${error.message}`)
   }
 
   void addAudit('STAFF_CREATED', `Created staff: ${(staff as SupabaseStaff).name} (${(staff as SupabaseStaff).role})`, 'info')

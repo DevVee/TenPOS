@@ -206,6 +206,7 @@ export function TransactionDetail() {
         <div className="px-4 py-3 border-b border-gray-100">
           <p className="text-sm font-semibold text-gray-800">Items Purchased ({tx.items.length})</p>
         </div>
+        <div className="overflow-x-auto">
         <table className="w-full">
           <thead className="bg-gray-50">
             <tr>
@@ -228,6 +229,7 @@ export function TransactionDetail() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Action buttons */}

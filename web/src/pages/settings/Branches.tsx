@@ -113,7 +113,7 @@ export function Branches() {
   // Pre-load manager/admin staff for the picker
   useEffect(() => {
     apiGetStaff({ limit: '999' }).then((res) => {
-      const list = (res as { data?: StaffOption[] }).data ?? (res as StaffOption[])
+      const list = ((res as { data?: unknown }).data ?? res) as StaffOption[]
       const managers = (Array.isArray(list) ? list : []).filter(
         (s: StaffOption) => s.role === 'manager' || s.role === 'admin'
       )

@@ -21,20 +21,18 @@
     color: #111827;
     line-height: 1.5;
     margin: 0;
-    /* Android safe area — status bar + nav bar */
-    padding-top: env(safe-area-inset-top);
-    padding-bottom: env(safe-area-inset-bottom);
-    padding-left: env(safe-area-inset-left);
-    padding-right: env(safe-area-inset-right);
+    /* Safe-area padding on left/right only.
+       top/bottom are handled per-layout-component (MobileHeader, BottomNav,
+       Sidebar spacer) so fixed elements don't double-count the inset. */
+    padding-left:  env(safe-area-inset-left,  0px);
+    padding-right: env(safe-area-inset-right, 0px);
     /* Disable overscroll bounce on Android WebView */
     overscroll-behavior: none;
   }
 
   #root {
     width: 100%;
-    min-height: 100vh;
-    /* Ensure full height accounts for safe areas */
-    min-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    min-height: 100dvh;
   }
 
   ::-webkit-scrollbar               { width: 5px; height: 5px; }
@@ -65,7 +63,7 @@
   /* ── Buttons ─────────────────────────────────────────────────────────────── */
 
   .btn-primary {
-    @apply inline-flex items-center gap-2 px-4 py-2 h-9
+    @apply inline-flex items-center gap-2 px-4 py-2 h-10
            text-white text-sm font-semibold
            rounded-lg
            active:scale-[0.98] transition-all duration-150
@@ -80,7 +78,7 @@
   }
 
   .btn-primary-lg {
-    @apply inline-flex items-center gap-2 px-5 py-2.5 h-11
+    @apply inline-flex items-center gap-2 px-5 py-2.5 h-12
            text-white text-sm font-semibold
            rounded-lg
            active:scale-[0.98] transition-all duration-150
@@ -95,7 +93,7 @@
   }
 
   .btn-secondary {
-    @apply inline-flex items-center gap-2 px-4 py-2 h-9
+    @apply inline-flex items-center gap-2 px-4 py-2 h-10
            bg-white text-gray-700 text-sm font-medium
            rounded-lg border border-gray-200
            hover:bg-gray-50 hover:border-gray-300
@@ -105,7 +103,7 @@
   }
 
   .btn-ghost {
-    @apply inline-flex items-center gap-2 px-3 py-2 h-9
+    @apply inline-flex items-center gap-2 px-3 py-2 h-10
            bg-transparent text-gray-500 text-sm font-medium
            rounded-lg
            hover:bg-gray-100 hover:text-gray-700
@@ -116,7 +114,7 @@
   }
 
   .btn-danger {
-    @apply inline-flex items-center gap-2 px-4 py-2 h-9
+    @apply inline-flex items-center gap-2 px-4 py-2 h-10
            bg-red-50 text-red-600 text-sm font-medium
            rounded-lg border border-red-100
            hover:bg-red-100 hover:border-red-200
@@ -132,7 +130,7 @@
   /* ── Inputs ──────────────────────────────────────────────────────────────── */
 
   .input-base {
-    @apply w-full h-9 px-3 text-sm text-gray-900 font-normal
+    @apply w-full h-10 px-3 text-sm text-gray-900 font-normal
            bg-white border border-gray-200 rounded-lg
            placeholder:text-gray-400
            transition-all duration-150;
@@ -164,7 +162,7 @@
   }
 
   .select-base {
-    @apply w-full h-9 px-3 text-sm text-gray-900
+    @apply w-full h-10 px-3 text-sm text-gray-900
            bg-white border border-gray-200 rounded-lg
            transition-all duration-150 cursor-pointer;
   }
@@ -179,11 +177,15 @@
   .card {
     @apply bg-white border border-gray-200 rounded-xl;
     box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    min-width: 0;
+    overflow: hidden;
   }
 
   .card-elevated {
     @apply bg-white border border-gray-200 rounded-xl;
     box-shadow: 0 2px 6px 0 rgb(0 0 0 / 0.07);
+    min-width: 0;
+    overflow: hidden;
   }
 
   /* ── Tables ──────────────────────────────────────────────────────────────── */
@@ -289,6 +291,87 @@
 
   .divider {
     @apply border-t border-gray-100;
+  }
+
+  /* ── Horizontal scroll wrapper for wide tables on mobile ────────────────── */
+
+  .table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* ── Mobile-specific overrides (phones < 640px) ──────────────────────────────── */
+
+@media (max-width: 639px) {
+
+  /* Larger minimum touch targets — WCAG recommends 44×44px */
+  .btn-primary,
+  .btn-primary-lg,
+  .btn-secondary,
+  .btn-ghost,
+  .btn-danger {
+    min-height: 44px;
+  }
+
+  /* Slightly smaller KPI values so long numbers don't overflow cards */
+  .kpi-value {
+    font-size: 1.625rem; /* 26px — matches text-2xl on mobile */
+  }
+
+  /* Table cells — a touch more vertical breathing room */
+  .table-row td {
+    padding-top:    0.875rem;   /* 14px */
+    padding-bottom: 0.875rem;
+  }
+
+  /* Section spacing — ensure visual separation between content blocks */
+  .section-gap {
+    margin-bottom: 1.25rem; /* 20px */
+  }
+}
+
+/* ── Tablet layout improvements (≥ 768px) ───────────────────────────────────── */
+
+@media (min-width: 768px) {
+
+  /* More breathing room inside cards on tablet */
+  .card, .card-elevated {
+    border-radius: 14px;
+  }
+
+  /* Table cells — more vertical padding on tablet */
+  .table-head th {
+    padding-top:    0.75rem;
+    padding-bottom: 0.75rem;
+    font-size: 11.5px;
+  }
+
+  .table-row td {
+    padding-top:    0.875rem;
+    padding-bottom: 0.875rem;
+  }
+
+  /* Badges slightly larger on tablet */
+  .badge {
+    font-size: 12px;
+    padding: 3px 7px;
+  }
+
+  /* Larger icon containers in UI sections */
+  .section-icon {
+    width:  2.25rem;  /* 36px */
+    height: 2.25rem;
+  }
+
+  /* Restore full page title size on tablet */
+  .page-title {
+    font-size: 1.5rem;  /* 24px */
+  }
+
+  /* KPI values — larger on tablet */
+  .kpi-value {
+    font-size: 2rem; /* 32px */
   }
 }
 

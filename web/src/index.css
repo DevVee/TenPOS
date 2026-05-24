@@ -313,26 +313,15 @@
     font-size: 10pt;
   }
 
-  /* A4 by default — reports, lists, transaction pages */
+  /* A4 default — reports, lists, transaction pages.
+     The receipt page overrides this via an injected <style> tag in
+     Receipt.tsx (added to <head> AFTER the compiled stylesheet, so it
+     wins in the cascade).  Do NOT add a second @page rule here;
+     having two conflicting rules confuses Chrome's print engine. */
   @page {
     size: A4 portrait;
     margin: 14mm 16mm;
   }
-
-  /* ── Thermal receipt override ───────────────────────────────────────────── */
-  /* Wrap the Receipt page content in <div className="thermal-receipt"> to
-     trigger the 58mm paper size (57.5mm roll) and thermal-specific rules. */
-  .thermal-receipt {
-    max-width: 54mm !important;
-    margin: 0 auto !important;
-  }
-  .thermal-receipt ~ * { display: none !important; }
-
-  @page thermal {
-    size: 58mm auto;
-    margin: 4mm 3mm;
-  }
-  .thermal-receipt { page: thermal; }
 
   /* ── Colour reset ───────────────────────────────────────────────────────── */
   * {

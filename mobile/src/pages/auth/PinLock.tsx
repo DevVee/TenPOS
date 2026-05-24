@@ -2,14 +2,16 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Delete, LogOut, Wifi, WifiOff, CheckCircle2 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
+import { useLogoutConfirm } from '../../hooks/useLogoutConfirm'
 import { setDevicePin, verifyDevicePin, hasDevicePin } from '../../lib/db'
 
 const PAD = ['1','2','3','4','5','6','7','8','9','','0','⌫']
 const PIN_LENGTH = 4
 
 export function PinLock() {
-  const { user, unlockPin, logout } = useAuthStore()
+  const { user, unlockPin } = useAuthStore()
   const navigate = useNavigate()
+  const { trigger: triggerLogout, modal: logoutModal } = useLogoutConfirm()
 
   // PIN setup: two-step (enter → confirm → save)
   const isSettingPin = !hasDevicePin()
@@ -82,7 +84,7 @@ export function PinLock() {
     if (next.length >= PIN_LENGTH) void verify(next)
   }
 
-  const handleLogout = () => { logout(); navigate('/login') }
+  const handleLogout = triggerLogout
 
   // Heading copy depends on setup vs unlock, and which step
   const heading = isSettingPin
@@ -97,6 +99,7 @@ export function PinLock() {
 
   return (
     <div className="card p-8 shadow-lg text-center max-w-xs w-full">
+      {logoutModal}
       {/* Online status */}
       <div className="flex justify-end mb-2">
         {navigator.onLine

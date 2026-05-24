@@ -84,7 +84,7 @@ export function StaffList() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <div className="flex gap-1.5">
+        <div className="flex gap-1.5 overflow-x-auto pb-0.5" style={{ scrollbarWidth: 'none' }}>
           {['all', 'admin', 'manager', 'cashier', 'viewer'].map((r) => (
             <button
               key={r}
@@ -103,6 +103,7 @@ export function StaffList() {
             <Loader2 className="w-6 h-6 animate-spin text-brand" />
           </div>
         ) : (
+          <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
@@ -157,6 +158,7 @@ export function StaffList() {
               )}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>

@@ -200,6 +200,7 @@ export function Returns() {
             <Loader2 className="w-6 h-6 animate-spin text-brand" />
           </div>
         ) : (
+          <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
@@ -232,6 +233,7 @@ export function Returns() {
               )}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

@@ -1,14 +1,16 @@
-import { useState, useEffect, useMemo, type ElementType } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback, type ElementType } from 'react'
 import {
   Search, Plus, Minus, Trash2, X, Tag,
   ChevronRight, Wifi, WifiOff, ArrowLeft, LogOut,
-  Package, ShoppingBag, Loader2, ShoppingCart, Info, Printer,
+  Package, ShoppingBag, Loader2, ShoppingCart, Info, Printer, Lock,
 } from 'lucide-react'
 import { usePOSStore } from '../../store/posStore'
 import { useAuthStore } from '../../store/authStore'
+import { useLogoutConfirm } from '../../hooks/useLogoutConfirm'
+import { useSettingsStore } from '../../store/settingsStore'
 import type { Product, CartItem } from '../../types'
 import { useNavigate, type NavigateFunction } from 'react-router-dom'
-import { db, type CachedProduct, type CachedInventory } from '../../lib/db'
+import { db, type CachedProduct, type CachedInventory, verifyDevicePin } from '../../lib/db'
 import { refreshProductCache, refreshInventoryCache, onSyncEvent } from '../../lib/sync'
 
 const CATEGORY_ICONS: Record<string, ElementType> = {
@@ -43,7 +45,8 @@ export function POSTerminal() {
     cart, addToCart, removeFromCart, updateQty,
     clearCart, searchQuery, setSearch, cartSubtotal, syncStatus, lastTransactionId,
   } = usePOSStore()
-  const { user, logout } = useAuthStore()
+  const { user } = useAuthStore()
+  const { trigger: triggerLogout, modal: logoutModal } = useLogoutConfirm()
 
   const [activeCategory, setActiveCategory] = useState('All')
   const [discountInput, setDiscountInput]   = useState<Record<string, string>>({})
@@ -76,6 +79,13 @@ export function POSTerminal() {
     () => ['All', ...[...new Set(products.map((p) => p.category).filter(Boolean))].sort()],
     [products],
   )
+  // MEDIUM-06: memoize per-category product counts (avoids O(n) filter on every render)
+  const categoryCounts = useMemo(() => {
+    const map = new Map<string, number>()
+    map.set('All', products.length)
+    for (const p of products) if (p.category) map.set(p.category, (map.get(p.category) ?? 0) + 1)
+    return map
+  }, [products])
   const filtered = products.filter((p) => {
     const matchCat    = activeCategory === 'All' || p.category === activeCategory
     const matchSearch = !searchQuery ||
@@ -86,10 +96,49 @@ export function POSTerminal() {
 
   const subtotal  = cartSubtotal()
   const itemCount = cart.reduce((s, i) => s + i.quantity, 0)
-  const handleLogout = () => { logout(); navigate('/login') }
+  const handleLogout = triggerLogout
+
+  // ── Barcode scanner (USB/BT HID keyboard wedge) ──────────────────────────
+  // Scanners act like a keyboard: rapid chars ending with Enter.
+  // We buffer chars that arrive within 100ms of each other; on Enter, if the
+  // buffer is ≥4 chars we treat it as a barcode and look it up.
+  const productsRef = useRef<Product[]>([])
+  useEffect(() => { productsRef.current = products }, [products])
+
+  useEffect(() => {
+    let buffer = ''
+    let lastKeyAt = 0
+
+    const onKey = (e: KeyboardEvent) => {
+      // Don't intercept when user is typing in a real input field
+      const tag = (e.target as HTMLElement)?.tagName?.toLowerCase()
+      if (tag === 'input' || tag === 'textarea') return
+
+      const now = Date.now()
+      if (now - lastKeyAt > 200) buffer = ''   // gap too long → reset (200ms for slower USB wedges)
+      lastKeyAt = now
+
+      if (e.key === 'Enter') {
+        const code = buffer.trim()
+        buffer = ''
+        if (code.length >= 4) {
+          const match = productsRef.current.find(
+            (p) => (p.barcode && p.barcode === code) || p.sku === code,
+          )
+          if (match) addToCart(match)
+        }
+      } else if (e.key.length === 1) {
+        buffer += e.key
+      }
+    }
+
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [addToCart])
 
   return (
     <div className="flex flex-col h-screen overflow-hidden" style={{ background: '#F5F7FA' }}>
+      {logoutModal}
 
       {/* ── HEADER ──────────────────────────────────────────────────────── */}
       <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-4 flex-shrink-0 z-10">
@@ -198,11 +247,30 @@ export function POSTerminal() {
               </div>
             </div>
 
+            {/* Check Cart — mobile only, visible when cart has items */}
+            {itemCount > 0 && (
+              <div className="px-4 pb-2.5 lg:hidden">
+                <button
+                  onClick={() => setMobileCartOpen(true)}
+                  className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-[0.98]"
+                  style={{ background: '#E5484D', color: '#fff' }}
+                >
+                  <span className="flex items-center gap-2">
+                    <ShoppingCart className="w-4 h-4" />
+                    Check Cart
+                  </span>
+                  <span className="bg-white/20 px-2.5 py-0.5 rounded-full text-xs font-bold">
+                    {itemCount} {itemCount === 1 ? 'item' : 'items'} · {fmt(cartSubtotal())}
+                  </span>
+                </button>
+              </div>
+            )}
+
             {/* Category tabs */}
             <div className="px-4 pb-2.5 flex gap-1.5 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
               {allCats.map((cat) => {
                 const Icon   = cat === 'All' ? Tag : (CATEGORY_ICONS[cat] ?? Package)
-                const count  = cat === 'All' ? products.length : products.filter((p) => p.category === cat).length
+                const count  = categoryCounts.get(cat) ?? 0
                 const active = activeCategory === cat
                 return (
                   <button
@@ -241,7 +309,7 @@ export function POSTerminal() {
                 )}
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
                 {filtered.map((product) => (
                   <ProductCard
                     key={product.id}
@@ -277,7 +345,7 @@ export function POSTerminal() {
       {mobileCartOpen && (
         <div className="lg:hidden fixed inset-0 z-50 flex">
           <div className="flex-1 bg-black/40" onClick={() => setMobileCartOpen(false)} />
-          <div className="w-80 bg-white flex flex-col h-full animate-slide-left">
+          <div className="w-80 max-w-[85vw] bg-white flex flex-col h-full animate-slide-left">
             <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-100">
               <p className="font-semibold text-gray-900 text-sm">Order</p>
               <button
@@ -330,7 +398,7 @@ function ProductCard({ product, inCart, onAdd, onInfo }: ProductCardProps) {
 
   return (
     <div
-      className={`relative bg-white border rounded-xl overflow-hidden transition-all duration-150 flex flex-col
+      className={`relative bg-white border rounded-xl overflow-hidden transition-all duration-150 flex flex-row sm:flex-col
         ${isOut
           ? 'border-gray-100 opacity-60'
           : inCart
@@ -340,7 +408,7 @@ function ProductCard({ product, inCart, onAdd, onInfo }: ProductCardProps) {
     >
       {/* Image */}
       <div
-        className={`relative w-full aspect-square bg-gray-50 ${!isOut ? 'cursor-pointer' : 'cursor-not-allowed'}`}
+        className={`relative flex-shrink-0 w-[88px] h-[88px] sm:w-full sm:h-auto sm:aspect-square bg-gray-50 ${!isOut ? 'cursor-pointer' : 'cursor-not-allowed'}`}
         onClick={() => !isOut && onAdd()}
       >
         {product.imageUrl ? (
@@ -351,43 +419,46 @@ function ProductCard({ product, inCart, onAdd, onInfo }: ProductCardProps) {
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
-            <Package className="w-10 h-10 text-gray-200" />
+            <Package className="w-8 h-8 sm:w-10 sm:h-10 text-gray-200" />
           </div>
         )}
 
-        {/* Out of stock */}
+        {/* Out of stock overlay */}
         {isOut && (
           <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
-            <span className="bg-gray-800 text-white text-[9px] font-semibold px-2 py-1 rounded-md tracking-wide uppercase">
-              Out of stock
+            <span className="bg-gray-800 text-white text-[9px] font-semibold px-1.5 py-0.5 rounded-md tracking-wide uppercase">
+              Out
             </span>
           </div>
         )}
 
         {/* Cart qty badge */}
         {inCart && !isOut && (
-          <span className="absolute top-2 left-2 min-w-[22px] h-[22px] bg-brand text-white rounded-md text-[11px] font-bold flex items-center justify-center px-1.5">
+          <span className="absolute top-1.5 left-1.5 min-w-[20px] h-[20px] bg-brand text-white rounded-md text-[10px] font-bold flex items-center justify-center px-1">
             {inCart.quantity}
           </span>
         )}
 
-        {/* Low stock badge */}
+        {/* Low stock badge — desktop only (no room on mobile thumbnail) */}
         {isLow && !isOut && (
-          <span className="absolute top-2 right-2 bg-amber-400 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md leading-none uppercase">
+          <span className="absolute top-1.5 right-1.5 hidden sm:block bg-amber-400 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md leading-none uppercase">
             Low
           </span>
         )}
       </div>
 
       {/* Info */}
-      <div className="p-2.5 flex-1 flex flex-col">
-        <p
-          className="text-xs font-medium text-gray-800 leading-tight line-clamp-2 mb-0.5 flex-1 cursor-pointer"
-          onClick={() => !isOut && onAdd()}
-        >
+      <div
+        className={`p-3 sm:p-2.5 flex-1 flex flex-col min-w-0 ${!isOut ? 'cursor-pointer' : ''}`}
+        onClick={() => !isOut && onAdd()}
+      >
+        <p className="text-[13px] sm:text-xs font-medium text-gray-800 leading-tight line-clamp-2 mb-1 sm:mb-0.5 flex-1">
           {product.name}
         </p>
-        <p className="text-[10px] text-gray-400 font-mono mb-2">{product.sku}</p>
+        <p className="text-[10px] text-gray-400 font-mono mb-1.5 sm:mb-2 hidden sm:block">{product.sku}</p>
+        {isLow && !isOut && (
+          <p className="text-[10px] text-amber-500 font-medium mb-1 sm:hidden">Low stock</p>
+        )}
 
         <div className="flex items-center justify-between gap-1">
           <p className="text-sm font-bold text-brand tabular-nums">{fmt(product.price)}</p>
@@ -595,6 +666,94 @@ function QtyInput({ value, onChange }: { value: number; onChange: (n: number) =>
   )
 }
 
+// ─── Discount PIN Modal ───────────────────────────────────────────────────────
+function DiscountPinModal({
+  amount, onConfirm, onCancel,
+}: { amount: number; onConfirm: () => void; onCancel: () => void }) {
+  const [pin, setPin]         = useState('')
+  const [error, setError]     = useState('')
+  const [checking, setChecking] = useState(false)
+
+  const submitPin = useCallback(async (p: string) => {
+    setChecking(true)
+    const ok = await verifyDevicePin(p)
+    setChecking(false)
+    if (ok) { onConfirm() }
+    else    { setError('Incorrect PIN'); setPin('') }
+  }, [onConfirm])
+
+  const handleKey = useCallback((k: string) => {
+    if (checking) return
+    if (k === '⌫') { setPin((p) => p.slice(0, -1)); setError(''); return }
+    if (pin.length >= 4) return
+    const next = pin + k
+    setPin(next)
+    setError('')
+    if (next.length === 4) submitPin(next)
+  }, [pin, checking, submitPin])
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50" onClick={onCancel} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-xs p-6 z-10">
+
+        {/* Icon + title */}
+        <div className="text-center mb-5">
+          <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-3">
+            <Lock className="w-5 h-5 text-amber-600" />
+          </div>
+          <h3 className="text-base font-semibold text-gray-900">Manager PIN Required</h3>
+          <p className="text-sm text-gray-500 mt-1">
+            Apply <span className="font-semibold text-gray-700">{fmt(amount)}</span> discount
+          </p>
+        </div>
+
+        {/* PIN dots */}
+        <div className="flex justify-center gap-3 mb-1">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className={`w-3 h-3 rounded-full border-2 transition-all ${
+              pin.length > i ? 'bg-brand border-brand' : 'bg-transparent border-gray-300'
+            }`} />
+          ))}
+        </div>
+
+        {/* Status line */}
+        <div className="h-6 flex items-center justify-center mb-3">
+          {error    && <p className="text-xs text-red-500">{error}</p>}
+          {checking && <p className="text-xs text-gray-400">Verifying…</p>}
+        </div>
+
+        {/* Numpad */}
+        <div className="grid grid-cols-3 gap-2 mb-4">
+          {(['1','2','3','4','5','6','7','8','9','','0','⌫'] as const).map((k, idx) =>
+            k === '' ? <div key={idx} /> : (
+              <button
+                key={idx}
+                disabled={checking}
+                onClick={() => handleKey(k)}
+                className={`h-12 rounded-xl text-lg font-semibold transition-all active:scale-95 disabled:opacity-50
+                  ${k === '⌫'
+                    ? 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    : 'bg-gray-50 text-gray-900 hover:bg-gray-100 active:bg-brand/10'
+                  }`}
+              >
+                {k}
+              </button>
+            )
+          )}
+        </div>
+
+        <button
+          onClick={onCancel}
+          className="w-full text-sm text-gray-500 hover:text-gray-700 py-2 rounded-lg hover:bg-gray-100 transition-all"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ─── Cart Panel ───────────────────────────────────────────────────────────────
 interface CartPanelProps {
   cart: CartItem[]
@@ -614,6 +773,10 @@ function CartPanel({
   cart, itemCount, subtotal, discountInput, setDiscountInput,
   removeFromCart, updateQty, clearCart, navigate, onCheckout, lastTransactionId,
 }: CartPanelProps) {
+  const { requirePinForDiscount } = useSettingsStore()
+  const [pinPending, setPinPending] = useState<{ itemId: string; amount: number } | null>(null)
+  const [showClearConfirm, setShowClearConfirm] = useState(false)
+
   return (
     <>
       {/* Header */}
@@ -626,11 +789,41 @@ function CartPanel({
         </div>
         {cart.length > 0 && (
           <button
-            onClick={clearCart}
+            onClick={() => setShowClearConfirm(true)}
             className="flex items-center gap-1 text-xs text-gray-400 hover:text-red-500 transition-colors font-medium px-2 py-1 rounded-lg hover:bg-red-50"
           >
             <Trash2 className="w-3 h-3" /> Clear
           </button>
+        )}
+
+        {/* MEDIUM-07: Clear cart confirmation */}
+        {showClearConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/40" onClick={() => setShowClearConfirm(false)} />
+            <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-xs p-6 z-10 text-center">
+              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <Trash2 className="w-5 h-5 text-red-500" />
+              </div>
+              <h3 className="text-base font-bold text-gray-900 mb-1">Clear Cart?</h3>
+              <p className="text-sm text-gray-500 mb-5">
+                Remove all {itemCount} item{itemCount !== 1 ? 's' : ''} from the cart?
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowClearConfirm(false)}
+                  className="flex-1 h-11 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => { clearCart(); setShowClearConfirm(false) }}
+                  className="flex-1 h-11 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition-all"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
 
@@ -708,7 +901,11 @@ function CartPanel({
                       }
                       onBlur={(e) => {
                         const v = parseFloat(e.target.value) || 0
-                        usePOSStore.getState().applyDiscount(item.product.id, v)
+                        if (v > 0 && requirePinForDiscount) {
+                          setPinPending({ itemId: item.product.id, amount: v })
+                        } else {
+                          usePOSStore.getState().applyDiscount(item.product.id, v)
+                        }
                       }}
                       className="w-full text-xs border border-gray-200 rounded-md px-2 py-1 bg-white text-gray-700 text-center
                         focus:outline-none focus:ring-1 focus:ring-brand/30 focus:border-brand"
@@ -746,7 +943,7 @@ function CartPanel({
             disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-lg
             transition-all shadow-brand/20 shadow-sm text-sm"
         >
-          <span>Charge {cart.length > 0 ? fmt(subtotal) : ''}</span>
+          <span>Proceed to Payment</span>
           <ChevronRight className="w-4 h-4" />
         </button>
 
@@ -761,6 +958,21 @@ function CartPanel({
           </button>
         )}
       </div>
+
+      {/* Discount PIN modal */}
+      {pinPending && (
+        <DiscountPinModal
+          amount={pinPending.amount}
+          onConfirm={() => {
+            usePOSStore.getState().applyDiscount(pinPending!.itemId, pinPending!.amount)
+            setPinPending(null)
+          }}
+          onCancel={() => {
+            setDiscountInput((d) => ({ ...d, [pinPending!.itemId]: '' }))
+            setPinPending(null)
+          }}
+        />
+      )}
     </>
   )
 }

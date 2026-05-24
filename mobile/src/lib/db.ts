@@ -39,6 +39,17 @@ export interface CachedProduct {
   active: boolean
   variants: { id: string; label: string; value: string; price_adjustment: number }[]
   cached_at: number
+  // Extended product info (optional — populated from Supabase products table)
+  description?: string
+  brand?: string
+  material?: string
+  color?: string
+  weight_grams?: number
+  length_cm?: number
+  width_cm?: number
+  height_cm?: number
+  tags?: string[]
+  notes?: string
 }
 
 // ─── Cached inventory ─────────────────────────────────────────────────────────
@@ -240,7 +251,7 @@ async function _pbkdf2(pin: string, salt?: Uint8Array): Promise<{ hash: string; 
     ['deriveBits'],
   )
   const bits = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', hash: 'SHA-256', salt: actualSalt, iterations: PBKDF2_ITER },
+    { name: 'PBKDF2', hash: 'SHA-256', salt: actualSalt.buffer as ArrayBuffer, iterations: PBKDF2_ITER },
     keyMaterial,
     256,
   )

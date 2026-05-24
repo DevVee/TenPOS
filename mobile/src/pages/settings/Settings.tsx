@@ -1,5 +1,5 @@
-﻿import { useState, useEffect, useCallback } from 'react'
-import { Save, Check, Store, Receipt, Shield, RefreshCw, Clock, Printer, Package, KeyRound, Eye, EyeOff, CheckCircle2, AlertCircle, Loader2, Archive, Download, Calendar } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { Save, Check, Store, Receipt, Shield, RefreshCw, Clock, Package, KeyRound, Eye, EyeOff, CheckCircle2, AlertCircle, Loader2, Archive, Download, Calendar } from 'lucide-react'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { Modal } from '../../components/ui/Modal'
 import { useSettingsStore } from '../../store/settingsStore'
@@ -154,8 +154,6 @@ export function Settings() {
     timeFormat:            s.timeFormat,
     timezone:              s.timezone,
     lowStockThreshold:     String(s.lowStockThreshold),
-    printerEnabled:        s.printerEnabled,
-    printerWidth:          s.printerWidth,
   })
 
   const set = (k: string, v: string | boolean) => setForm((f) => ({ ...f, [k]: v }))
@@ -178,8 +176,6 @@ export function Settings() {
       timeFormat:            form.timeFormat as typeof s.timeFormat,
       timezone:              form.timezone,
       lowStockThreshold:     parseInt(form.lowStockThreshold) || 5,
-      printerEnabled:        form.printerEnabled,
-      printerWidth:          form.printerWidth as typeof s.printerWidth,
     })
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
@@ -200,12 +196,12 @@ export function Settings() {
         }
       />
 
-      <div className="space-y-4">
+      <div className="space-y-4 md:space-y-6">
 
         {/* ── Row 1: Store Information (full width) ───────────────────── */}
-        <div className="card p-5">
+        <div className="card p-5 md:p-6">
           <SectionHeader icon={Store} title="Store Information" />
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
             <div className="sm:col-span-2 lg:col-span-3">
               <label className="block text-xs font-medium text-gray-700 mb-1.5">Business Name</label>
               <input className="input-base" value={form.storeName} onChange={(e) => set('storeName', e.target.value)} />
@@ -231,13 +227,14 @@ export function Settings() {
 
         {/* ── Manager Override PIN (managers/admins only) ──────────────── */}
         {isManager && (
-          <div className="card p-5">
+          <div className="card p-5 md:p-6">
             <SectionHeader icon={KeyRound} title="Manager Override PIN" />
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex-1">
-                <p className="text-sm text-gray-600">
-                  Set a personal PIN so cashiers can request manager authorization for voids and discounts
-                  without you being physically present.
+            {/* Stack vertically on mobile, side-by-side on sm+ */}
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-gray-600 leading-relaxed">
+                  Set a personal PIN so cashiers can request manager authorization for
+                  voids and discounts without you being physically present.
                 </p>
                 <div className="flex items-center gap-2 mt-3">
                   {pinHasSet ? (
@@ -251,15 +248,15 @@ export function Settings() {
                   )}
                 </div>
               </div>
-              <div className="flex gap-2 flex-shrink-0">
-                <button onClick={openSetPin} className="btn-secondary text-sm flex items-center gap-1.5">
+              <div className="flex gap-2 sm:flex-shrink-0">
+                <button onClick={openSetPin} className="btn-secondary text-sm flex items-center gap-1.5 flex-1 sm:flex-none justify-center">
                   <KeyRound className="w-3.5 h-3.5" />
                   {pinHasSet ? 'Change PIN' : 'Set PIN'}
                 </button>
                 {pinHasSet && (
                   <button
                     onClick={() => setShowClearConfirm(true)}
-                    className="btn-secondary text-sm text-red-600 border-red-200 hover:bg-red-50"
+                    className="btn-secondary text-sm text-red-600 border-red-200 hover:bg-red-50 flex-1 sm:flex-none"
                   >
                     Remove
                   </button>
@@ -270,7 +267,7 @@ export function Settings() {
         )}
 
         {/* ── Backup & Export ─────────────────────────────────────────── */}
-        <div className="card p-5">
+        <div className="card p-5 md:p-6">
           <SectionHeader icon={Archive} title="Backup & Export" />
 
           {/* Auto-backup due banner */}
@@ -406,15 +403,15 @@ export function Settings() {
         </div>
 
         {/* ── Row 2: Two columns ───────────────────────────────────────── */}
-        <div className="grid lg:grid-cols-2 gap-4">
+        <div className="grid lg:grid-cols-2 gap-4 md:gap-6">
 
           {/* LEFT column */}
-          <div className="space-y-4">
+          <div className="space-y-4 md:space-y-6">
 
             {/* Receipt Customization */}
-            <div className="card p-5">
+            <div className="card p-5 md:p-6">
               <SectionHeader icon={Receipt} title="Receipt Customization" />
-              <div className="space-y-4">
+              <div className="space-y-4 md:space-y-5">
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1.5">Receipt Header</label>
                   <input className="input-base" value={form.receiptHeader} onChange={(e) => set('receiptHeader', e.target.value)} />
@@ -435,39 +432,16 @@ export function Settings() {
               </div>
             </div>
 
-            {/* Printer Settings */}
-            <div className="card p-5">
-              <SectionHeader icon={Printer} title="Printer Settings" />
-              <div className="space-y-4">
-                <div className="flex items-center gap-3 cursor-pointer" onClick={() => set('printerEnabled', !form.printerEnabled)}>
-                  <Toggle checked={form.printerEnabled} onChange={(v) => set('printerEnabled', v)} />
-                  <div>
-                    <p className="text-sm font-medium text-gray-700">Thermal Printer Enabled</p>
-                    <p className="text-xs text-gray-400 mt-0.5">Auto-print receipts after each completed transaction</p>
-                  </div>
-                </div>
-                {form.printerEnabled && (
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1.5">Paper Width</label>
-                    <select className="input-base" value={form.printerWidth} onChange={(e) => set('printerWidth', e.target.value)}>
-                      <option value="58mm">58mm — Narrow</option>
-                      <option value="80mm">80mm — Standard</option>
-                    </select>
-                  </div>
-                )}
-              </div>
-            </div>
-
           </div>
 
           {/* RIGHT column */}
-          <div className="space-y-4">
+          <div className="space-y-4 md:space-y-6">
 
             {/* Date & Time */}
-            <div className="card p-5">
+            <div className="card p-5 md:p-6">
               <SectionHeader icon={Clock} title="Date & Time" />
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-4 md:space-y-5">
+                <div className="grid grid-cols-2 gap-3 md:gap-4">
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1.5">Date Format</label>
                     <select className="input-base" value={form.dateFormat} onChange={(e) => set('dateFormat', e.target.value)}>
@@ -505,9 +479,9 @@ export function Settings() {
             </div>
 
             {/* Authorization */}
-            <div className="card p-5">
+            <div className="card p-5 md:p-6">
               <SectionHeader icon={Shield} title="Authorization Requirements" />
-              <div className="space-y-4">
+              <div className="space-y-4 md:space-y-5">
                 {[
                   {
                     key:  'requirePinForDiscount',
@@ -539,10 +513,10 @@ export function Settings() {
             </div>
 
             {/* Inventory + Sync side by side */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-3 md:gap-4">
 
               {/* Inventory */}
-              <div className="card p-5">
+              <div className="card p-4 md:p-5">
                 <SectionHeader icon={Package} title="Inventory" />
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1.5">Low Stock Threshold</label>
@@ -559,7 +533,7 @@ export function Settings() {
               </div>
 
               {/* Sync */}
-              <div className="card p-5">
+              <div className="card p-4 md:p-5">
                 <SectionHeader icon={RefreshCw} title="Sync" />
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1.5">Auto-Sync Interval</label>

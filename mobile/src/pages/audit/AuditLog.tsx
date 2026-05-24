@@ -96,7 +96,7 @@ export function AuditLog() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <div className="flex gap-1.5">
+        <div className="flex gap-1.5 overflow-x-auto pb-0.5" style={{ scrollbarWidth: 'none' }}>
           {['all', 'info', 'warning', 'critical'].map((s) => (
             <button
               key={s}
