@@ -1,7 +1,7 @@
 {
   "installCommand": "npm install",
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist",
+  "buildCommand": "npm run build --workspace=web",
+  "outputDirectory": "web/dist",
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ]
