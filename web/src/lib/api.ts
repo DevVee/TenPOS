@@ -1431,29 +1431,6 @@ export async function apiGetAuditLog(params?: Record<string, string>) {
   return { data: entries, total: count ?? 0, page, limit }
 }
 
-// ─── Store Settings (branch-scoped) ──────────────────────────────────────────
-
-/**
- * Load store settings from the active branch's `settings` JSONB column via RPC.
- * Returns {} if the column doesn't exist yet or the user has no branch.
- */
-export async function apiGetStoreSettings(): Promise<Record<string, unknown>> {
-  try {
-    const { data, error } = await supabase.rpc('get_branch_settings')
-    if (error) return {}
-    return (data as Record<string, unknown>) ?? {}
-  } catch { return {} }
-}
-
-/**
- * Persist store settings to the branch's `settings` JSONB column.
- * Requires manager or admin role — enforced server-side via SECURITY DEFINER RPC.
- */
-export async function apiUpdateStoreSettings(settings: Record<string, unknown>): Promise<void> {
-  const { error } = await supabase.rpc('update_branch_settings', { p_settings: settings })
-  if (error) throw new Error(error.message)
-}
-
 // ─── Stock adjustments ────────────────────────────────────────────────────────
 
 export async function apiGetAdjustments(params?: Record<string, string>) {

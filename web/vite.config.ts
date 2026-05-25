@@ -2,8 +2,17 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 
+// Stamped into the bundle at build time — visible in browser console as:
+//   [TenPOS] build 2026-05-25T14:30:00.000Z
+const BUILD_TIME = new Date().toISOString()
+
 export default defineConfig({
   plugins: [react()],
+
+  define: {
+    // Replaced at compile-time so there's no runtime overhead
+    __BUILD_TIME__: JSON.stringify(BUILD_TIME),
+  },
 
   resolve: {
     alias: {

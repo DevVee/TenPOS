@@ -79,17 +79,17 @@ type Actions =
 export const useSettingsStore = create<SettingsState>()(
   persist(
   (set, get) => ({
-  // Store info (populated from Supabase branch settings on login)
-  storeName:     '',
-  address:       '',
-  phone:         '',
-  email:         '',
-  website:       '',
-  tin:           '',
+  // Store info
+  storeName:     'Ten Foundation Philippines Inc.',
+  address:       '123 Katipunan Ave, Quezon City, Metro Manila',
+  phone:         '+63 2 8123 4567',
+  email:         'info@tenfoundation.ph',
+  website:       'www.carryhopebags.com',
+  tin:           '123-456-789-000',
 
   // Receipt
-  receiptHeader:   '',
-  receiptFooter:   'Thank you for your purchase!',
+  receiptHeader:   'Ten Foundation Philippines Inc.',
+  receiptFooter:   'Thank you for your purchase! God bless you.',
   receiptShowLogo: true,
   receiptShowTax:  true,
 
