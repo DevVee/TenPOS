@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo, useRef, useCallback, type ElementType } from 'react'
+﻿import { useState, useEffect, useMemo, useRef, useCallback, type ElementType } from 'react'
 import {
-  Search, Plus, Minus, Trash2, X, Tag,
+  Search, Plus, Minus, Trash2, X, Tag, SlidersHorizontal,
   ChevronRight, Wifi, WifiOff, ArrowLeft, LogOut,
   Package, ShoppingBag, Loader2, ShoppingCart, Info, Printer, Lock,
 } from 'lucide-react'
@@ -10,7 +10,7 @@ import { useLogoutConfirm } from '../../hooks/useLogoutConfirm'
 import { useSettingsStore } from '../../store/settingsStore'
 import type { Product, CartItem } from '../../types'
 import { useNavigate, type NavigateFunction } from 'react-router-dom'
-import { db, type CachedProduct, type CachedInventory, verifyDevicePin } from '../../lib/db'
+import { db, type CachedProduct, type CachedInventory, verifyManagerPin } from '../../lib/db'
 import { refreshProductCache, refreshInventoryCache, onSyncEvent } from '../../lib/sync'
 
 const CATEGORY_ICONS: Record<string, ElementType> = {
@@ -35,10 +35,21 @@ function toProduct(p: CachedProduct, inv: CachedInventory[]): Product {
       priceAdjustment: v.price_adjustment,
       stock: inv.find((i) => i.product_id === p.id && i.variant_id === v.id)?.stock ?? 0,
     })),
+    // Extended product details
+    description: p.description ?? undefined,
+    brand:       p.brand ?? undefined,
+    material:    p.material ?? undefined,
+    color:       p.color ?? undefined,
+    weightGrams: p.weight_grams ?? undefined,
+    lengthCm:    p.length_cm ?? undefined,
+    widthCm:     p.width_cm ?? undefined,
+    heightCm:    p.height_cm ?? undefined,
+    tags:        p.tags ?? undefined,
+    notes:       p.notes ?? undefined,
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 export function POSTerminal() {
   const navigate = useNavigate()
   const {
@@ -55,6 +66,12 @@ export function POSTerminal() {
   const [loading, setLoading]               = useState(true)
   const [mobileCartOpen, setMobileCartOpen] = useState(false)
   const [infoProduct, setInfoProduct]       = useState<Product | null>(null)
+
+  // Advanced filter state
+  const [filterOpen,     setFilterOpen]     = useState(false)
+  const [filterBrand,    setFilterBrand]    = useState('')
+  const [filterMaterial, setFilterMaterial] = useState('')
+  const [filterColor,    setFilterColor]    = useState('')
 
   useEffect(() => {
     let alive = true
@@ -86,48 +103,81 @@ export function POSTerminal() {
     for (const p of products) if (p.category) map.set(p.category, (map.get(p.category) ?? 0) + 1)
     return map
   }, [products])
+  // Unique options for advanced filters (derived from loaded products)
+  const filterOptions = useMemo(() => ({
+    brands:    [...new Set(products.map((p) => p.brand).filter(Boolean) as string[])].sort(),
+    materials: [...new Set(products.map((p) => p.material).filter(Boolean) as string[])].sort(),
+    colors:    [...new Set(products.map((p) => p.color).filter(Boolean) as string[])].sort(),
+  }), [products])
+
+  const activeFilterCount = [filterBrand, filterMaterial, filterColor].filter(Boolean).length
+
   const filtered = products.filter((p) => {
     const matchCat    = activeCategory === 'All' || p.category === activeCategory
-    const matchSearch = !searchQuery ||
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.sku.toLowerCase().includes(searchQuery.toLowerCase())
-    return matchCat && matchSearch
+    const matchBrand  = !filterBrand    || p.brand    === filterBrand
+    const matchMat    = !filterMaterial || p.material === filterMaterial
+    const matchColor  = !filterColor    || p.color    === filterColor
+    if (!searchQuery) return matchCat && matchBrand && matchMat && matchColor
+    const q = searchQuery.toLowerCase()
+    const matchSearch =
+      p.name.toLowerCase().includes(q) ||
+      p.sku.toLowerCase().includes(q) ||
+      (p.barcode && p.barcode.toLowerCase().includes(q)) ||
+      (p.description && p.description.toLowerCase().includes(q)) ||
+      (p.brand && p.brand.toLowerCase().includes(q)) ||
+      (p.material && p.material.toLowerCase().includes(q)) ||
+      (p.color && p.color.toLowerCase().includes(q)) ||
+      (p.tags && p.tags.some((t) => t.toLowerCase().includes(q))) ||
+      (p.notes && p.notes.toLowerCase().includes(q))
+    return matchCat && matchSearch && matchBrand && matchMat && matchColor
   })
 
   const subtotal  = cartSubtotal()
   const itemCount = cart.reduce((s, i) => s + i.quantity, 0)
   const handleLogout = triggerLogout
 
-  // ── Barcode scanner (USB/BT HID keyboard wedge) ──────────────────────────
+  // â"€â"€ Barcode scanner (USB/BT HID keyboard wedge) â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
   // Scanners act like a keyboard: rapid chars ending with Enter.
   // We buffer chars that arrive within 100ms of each other; on Enter, if the
-  // buffer is ≥4 chars we treat it as a barcode and look it up.
-  const productsRef = useRef<Product[]>([])
+  // buffer is â‰¥4 chars we treat it as a barcode and look it up.
+  const productsRef    = useRef<Product[]>([])
+  const autoAddTimer   = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => { productsRef.current = products }, [products])
 
   useEffect(() => {
     let buffer = ''
     let lastKeyAt = 0
+    let charIntervals: number[] = []
 
     const onKey = (e: KeyboardEvent) => {
-      // Don't intercept when user is typing in a real input field
-      const tag = (e.target as HTMLElement)?.tagName?.toLowerCase()
-      if (tag === 'input' || tag === 'textarea') return
-
       const now = Date.now()
-      if (now - lastKeyAt > 200) buffer = ''   // gap too long → reset (200ms for slower USB wedges)
+      const gap = now - lastKeyAt
+
+      // Reset on long gap (human pause between words/chars)
+      if (gap > 200) {
+        buffer = ''
+        charIntervals = []
+      }
       lastKeyAt = now
 
       if (e.key === 'Enter') {
         const code = buffer.trim()
         buffer = ''
-        if (code.length >= 4) {
+        // Treat as scanner if >=4 chars arrived very fast (all < 50ms apart = scanner speed)
+        const isScan = code.length >= 4 && charIntervals.every((t) => t < 80)
+        charIntervals = []
+        if (isScan) {
           const match = productsRef.current.find(
             (p) => (p.barcode && p.barcode === code) || p.sku === code,
           )
-          if (match) addToCart(match)
+          if (match) {
+            addToCart(match)
+            setSearch('') // clear any barcode chars that landed in the search box
+            e.preventDefault()
+          }
         }
       } else if (e.key.length === 1) {
+        charIntervals.push(gap)
         buffer += e.key
       }
     }
@@ -140,15 +190,14 @@ export function POSTerminal() {
     <div className="flex flex-col h-screen overflow-hidden" style={{ background: '#F5F7FA' }}>
       {logoutModal}
 
-      {/* ── HEADER ──────────────────────────────────────────────────────── */}
+      {/* â"€â"€ HEADER â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */}
       <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-4 flex-shrink-0 z-10">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center space-x-3">
           <button
             onClick={() => navigate('/dashboard')}
-            className="w-8 h-8 rounded-lg hover:bg-gray-100 text-gray-500 flex items-center justify-center transition-colors"
-            title="Dashboard"
+            className="flex items-center space-x-1.5 h-8 px-3 bg-gray-100 hover:bg-gray-200 text-gray-600 font-semibold text-xs transition-colors"
           >
-            <ArrowLeft className="w-4 h-4" />
+            <ArrowLeft className="w-3.5 h-3.5" /><span>Close</span>
           </button>
           <div className="w-px h-5 bg-gray-200" />
           <div>
@@ -157,9 +206,9 @@ export function POSTerminal() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center space-x-2">
           {/* Sync status badge */}
-          <div className={`hidden sm:flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 border rounded-lg ${
+          <div className={`hidden sm:flex items-center space-x-1.5 text-xs font-medium px-2.5 py-1.5 border rounded-lg ${
             syncStatus === 'online'
               ? 'text-emerald-600 bg-emerald-50 border-emerald-100'
               : syncStatus === 'syncing'
@@ -178,7 +227,7 @@ export function POSTerminal() {
           {lastTransactionId && (
             <button
               onClick={() => navigate(`/pos/receipt/${lastTransactionId}`)}
-              className="w-8 h-8 rounded-lg hover:bg-brand/10 text-gray-400 hover:text-brand flex items-center justify-center transition-colors"
+              className="w-8 h-8 hover:bg-brand/10 text-gray-400 hover:text-brand flex items-center justify-center transition-colors"
               title="Reprint last receipt"
             >
               <Printer className="w-4 h-4" />
@@ -188,7 +237,7 @@ export function POSTerminal() {
           {/* Mobile cart button */}
           <button
             onClick={() => setMobileCartOpen(true)}
-            className="lg:hidden relative w-8 h-8 rounded-lg bg-brand text-white flex items-center justify-center"
+            className="lg:hidden relative w-8 h-8 bg-brand text-white flex items-center justify-center"
           >
             <ShoppingCart className="w-4 h-4" />
             {itemCount > 0 && (
@@ -199,13 +248,13 @@ export function POSTerminal() {
           </button>
 
           {user && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center space-x-2">
               <div className="w-7 h-7 rounded-md bg-brand flex items-center justify-center text-white text-xs font-bold">
                 {user.avatarInitials}
               </div>
               <button
                 onClick={handleLogout}
-                className="w-8 h-8 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 flex items-center justify-center transition-colors"
+                className="w-8 h-8 hover:bg-red-50 text-gray-400 hover:text-red-500 flex items-center justify-center transition-colors"
                 title="Logout"
               >
                 <LogOut className="w-4 h-4" />
@@ -215,47 +264,80 @@ export function POSTerminal() {
         </div>
       </header>
 
-      {/* ── BODY ────────────────────────────────────────────────────────── */}
+      {/* â"€â"€ BODY â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */}
       <div className="flex flex-1 overflow-hidden">
 
-        {/* ── LEFT: Products ─────────────────────────────────────────── */}
+        {/* â"€â"€ LEFT: Products â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */}
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
 
           {/* Search + category bar */}
           <div className="bg-white border-b border-gray-200 flex-shrink-0">
-            {/* Search */}
+            {/* Search + Filter */}
             <div className="px-4 pt-3 pb-2.5">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                <input
-                  className="w-full h-9 pl-9 pr-9 text-sm bg-gray-100 border border-transparent rounded-lg
-                    placeholder:text-gray-400 text-gray-800
-                    focus:outline-none focus:bg-white focus:border-gray-300 focus:ring-2 focus:ring-brand/15
-                    transition-all"
-                  placeholder="Search products or scan barcode…"
-                  value={searchQuery}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-                {searchQuery && (
-                  <button
-                    onClick={() => setSearch('')}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
+              <div className="flex items-center space-x-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                  <input
+                    className="w-full h-9 pl-9 pr-9 text-sm bg-gray-100 border border-transparent rounded-lg
+                      placeholder:text-gray-400 text-gray-800
+                      focus:outline-none focus:bg-white focus:border-gray-300 focus:ring-2 focus:ring-brand/15
+                      transition-all"
+                    placeholder="Search products or scan barcode…"
+                    value={searchQuery}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      setSearch(val)
+                      // Path B: debounced exact-match auto-add
+                      if (autoAddTimer.current) clearTimeout(autoAddTimer.current)
+                      if (val.length >= 4) {
+                        autoAddTimer.current = setTimeout(() => {
+                          autoAddTimer.current = null
+                          const match = productsRef.current.find(
+                            (p) => (p.barcode && p.barcode === val) || p.sku === val,
+                          )
+                          if (match) { addToCart(match); setSearch('') }
+                        }, 150)
+                      }
+                    }}
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearch('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+                {/* Advanced filter button */}
+                <button
+                  onClick={() => setFilterOpen(true)}
+                  className={`relative h-9 px-3 flex items-center space-x-1.5 text-xs font-semibold border transition-colors flex-shrink-0 ${
+                    activeFilterCount > 0
+                      ? 'border-brand text-brand bg-brand/5 hover:bg-brand/10'
+                      : 'border-gray-200 text-gray-600 bg-gray-100 hover:bg-gray-200'
+                  }`}
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Filter</span>
+                  {activeFilterCount > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 bg-brand text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1">
+                      {activeFilterCount}
+                    </span>
+                  )}
+                </button>
               </div>
             </div>
 
-            {/* Check Cart — mobile only, visible when cart has items */}
+            {/* Check Cart â€" mobile only, visible when cart has items */}
             {itemCount > 0 && (
               <div className="px-4 pb-2.5 lg:hidden">
                 <button
                   onClick={() => setMobileCartOpen(true)}
-                  className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-[0.98]"
+                  className="w-full flex items-center justify-between px-4 py-2.5 text-sm font-bold transition-all active:scale-[0.98]"
                   style={{ background: '#E5484D', color: '#fff' }}
                 >
-                  <span className="flex items-center gap-2">
+                  <span className="flex items-center space-x-2">
                     <ShoppingCart className="w-4 h-4" />
                     Check Cart
                   </span>
@@ -267,7 +349,7 @@ export function POSTerminal() {
             )}
 
             {/* Category tabs */}
-            <div className="px-4 pb-2.5 flex gap-1.5 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+            <div className="px-4 pb-2.5 flex space-x-1 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
               {allCats.map((cat) => {
                 const Icon   = cat === 'All' ? Tag : (CATEGORY_ICONS[cat] ?? Package)
                 const count  = categoryCounts.get(cat) ?? 0
@@ -276,7 +358,7 @@ export function POSTerminal() {
                   <button
                     key={cat}
                     onClick={() => setActiveCategory(cat)}
-                    className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all
+                    className={`flex-shrink-0 flex items-center space-x-1.5 px-3 py-1.5 text-sm font-medium transition-all
                       ${active
                         ? 'bg-brand text-white'
                         : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -294,12 +376,12 @@ export function POSTerminal() {
           {/* Product grid */}
           <div className="flex-1 overflow-y-auto p-4">
             {loading ? (
-              <div className="flex flex-col items-center justify-center h-48 gap-2 text-gray-400">
+              <div className="flex flex-col items-center justify-center h-48 space-y-2 text-gray-400">
                 <Loader2 className="w-6 h-6 animate-spin" />
                 <p className="text-sm">Loading products…</p>
               </div>
             ) : filtered.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-48 gap-2">
+              <div className="flex flex-col items-center justify-center h-48 space-y-2">
                 <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center">
                   <Search className="w-5 h-5 text-gray-400" />
                 </div>
@@ -324,7 +406,7 @@ export function POSTerminal() {
           </div>
         </div>
 
-        {/* ── RIGHT: Cart (desktop) ───────────────────────────────────── */}
+        {/* â"€â"€ RIGHT: Cart (desktop) â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */}
         <div className="hidden lg:flex w-80 xl:w-96 flex-col bg-white border-l border-gray-200">
           <CartPanel
             cart={cart}
@@ -341,7 +423,7 @@ export function POSTerminal() {
         </div>
       </div>
 
-      {/* ── MOBILE CART DRAWER ──────────────────────────────────────── */}
+      {/* â"€â"€ MOBILE CART DRAWER â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */}
       {mobileCartOpen && (
         <div className="lg:hidden fixed inset-0 z-50 flex">
           <div className="flex-1 bg-black/40" onClick={() => setMobileCartOpen(false)} />
@@ -350,9 +432,9 @@ export function POSTerminal() {
               <p className="font-semibold text-gray-900 text-sm">Order</p>
               <button
                 onClick={() => setMobileCartOpen(false)}
-                className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100"
+                className="h-7 px-2.5 hover:bg-gray-100 text-gray-500 hover:text-gray-700 text-xs font-semibold transition-colors"
               >
-                <X className="w-4 h-4 text-gray-500" />
+                Close
               </button>
             </div>
             <CartPanel
@@ -372,7 +454,120 @@ export function POSTerminal() {
         </div>
       )}
 
-      {/* ── PRODUCT INFO MODAL ──────────────────────────────────────── */}
+      {/* ── ADVANCED FILTER MODAL ────────────────────────────────────────── */}
+      {filterOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setFilterOpen(false)} />
+          <div className="relative bg-white rounded-xl shadow-xl w-full max-w-sm z-10 overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div>
+                <h3 className="text-base font-semibold text-gray-900">Filter Products</h3>
+                {activeFilterCount > 0 && (
+                  <p className="text-xs text-brand mt-0.5">{activeFilterCount} filter{activeFilterCount > 1 ? 's' : ''} active</p>
+                )}
+              </div>
+              <button
+                onClick={() => setFilterOpen(false)}
+                className="h-7 px-2.5 hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors text-xs font-semibold"
+              >
+                Close
+              </button>
+            </div>
+
+            {/* Filter options */}
+            <div className="px-5 py-4 space-y-4">
+              {/* Brand */}
+              {filterOptions.brands.length > 0 && (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Brand</label>
+                  <div className="flex flex-wrap" style={{ gap: '6px' }}>
+                    <button
+                      onClick={() => setFilterBrand('')}
+                      className={`px-3 py-1.5 text-xs font-medium border transition-colors ${
+                        !filterBrand ? 'bg-brand text-white border-brand' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >All</button>
+                    {filterOptions.brands.map((b) => (
+                      <button key={b} onClick={() => setFilterBrand(filterBrand === b ? '' : b)}
+                        className={`px-3 py-1.5 text-xs font-medium border transition-colors ${
+                          filterBrand === b ? 'bg-brand text-white border-brand' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                        }`}
+                      >{b}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Material */}
+              {filterOptions.materials.length > 0 && (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Material</label>
+                  <div className="flex flex-wrap" style={{ gap: '6px' }}>
+                    <button
+                      onClick={() => setFilterMaterial('')}
+                      className={`px-3 py-1.5 text-xs font-medium border transition-colors ${
+                        !filterMaterial ? 'bg-brand text-white border-brand' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >All</button>
+                    {filterOptions.materials.map((m) => (
+                      <button key={m} onClick={() => setFilterMaterial(filterMaterial === m ? '' : m)}
+                        className={`px-3 py-1.5 text-xs font-medium border transition-colors ${
+                          filterMaterial === m ? 'bg-brand text-white border-brand' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                        }`}
+                      >{m}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Color */}
+              {filterOptions.colors.length > 0 && (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Color</label>
+                  <div className="flex flex-wrap" style={{ gap: '6px' }}>
+                    <button
+                      onClick={() => setFilterColor('')}
+                      className={`px-3 py-1.5 text-xs font-medium border transition-colors ${
+                        !filterColor ? 'bg-brand text-white border-brand' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >All</button>
+                    {filterOptions.colors.map((c) => (
+                      <button key={c} onClick={() => setFilterColor(filterColor === c ? '' : c)}
+                        className={`px-3 py-1.5 text-xs font-medium border transition-colors ${
+                          filterColor === c ? 'bg-brand text-white border-brand' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                        }`}
+                      >{c}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {filterOptions.brands.length === 0 && filterOptions.materials.length === 0 && filterOptions.colors.length === 0 && (
+                <p className="text-sm text-gray-400 text-center py-4">No filter options available for current products</p>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex space-x-2 px-5 pb-5">
+              <button
+                onClick={() => { setFilterBrand(''); setFilterMaterial(''); setFilterColor('') }}
+                className="btn-secondary flex-1"
+              >
+                Clear All
+              </button>
+              <button
+                onClick={() => setFilterOpen(false)}
+                className="btn-primary flex-1"
+              >
+                <span>Apply ({filtered.length})</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── PRODUCT INFO MODAL ──────────────────────────────────────────── */}
       {infoProduct && (
         <ProductInfoModal
           product={infoProduct}
@@ -384,7 +579,7 @@ export function POSTerminal() {
   )
 }
 
-// ─── Product Card ─────────────────────────────────────────────────────────────
+// â"€â"€â"€ Product Card â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 interface ProductCardProps {
   product: Product
   inCart?: CartItem
@@ -439,7 +634,7 @@ function ProductCard({ product, inCart, onAdd, onInfo }: ProductCardProps) {
           </span>
         )}
 
-        {/* Low stock badge — desktop only (no room on mobile thumbnail) */}
+        {/* Low stock badge â€" desktop only (no room on mobile thumbnail) */}
         {isLow && !isOut && (
           <span className="absolute top-1.5 right-1.5 hidden sm:block bg-amber-400 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md leading-none uppercase">
             Low
@@ -460,9 +655,9 @@ function ProductCard({ product, inCart, onAdd, onInfo }: ProductCardProps) {
           <p className="text-[10px] text-amber-500 font-medium mb-1 sm:hidden">Low stock</p>
         )}
 
-        <div className="flex items-center justify-between gap-1">
+        <div className="flex items-center justify-between">
           <p className="text-sm font-bold text-brand tabular-nums">{fmt(product.price)}</p>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center space-x-1">
             <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-md tabular-nums
               ${isOut  ? 'bg-gray-100 text-gray-400' :
                 isLow  ? 'bg-amber-50 text-amber-600' :
@@ -482,7 +677,7 @@ function ProductCard({ product, inCart, onAdd, onInfo }: ProductCardProps) {
   )
 }
 
-// ─── Product Info Modal ───────────────────────────────────────────────────────
+// â"€â"€â"€ Product Info Modal â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 interface ProductInfoModalProps {
   product: Product
   onClose: () => void
@@ -492,7 +687,7 @@ interface ProductInfoModalProps {
 function DetailRow({ label, value }: { label: string; value?: string | number | null }) {
   if (value === undefined || value === null || value === '') return null
   return (
-    <div className="flex items-start gap-3">
+    <div className="flex items-start space-x-3">
       <span className="text-xs text-gray-400 w-20 flex-shrink-0 pt-0.5">{label}</span>
       <span className="text-sm text-gray-700 flex-1">{value}</span>
     </div>
@@ -512,16 +707,16 @@ function ProductInfoModal({ product, onClose, onAddToCart }: ProductInfoModalPro
       <div className="relative bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden z-10">
 
         {/* Header */}
-        <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-gray-100 flex-shrink-0">
+        <div className="flex items-start justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
           <div className="min-w-0">
             <h2 className="text-base font-semibold text-gray-900 leading-tight">{product.name}</h2>
             <p className="text-xs text-gray-400 font-mono mt-0.5">{product.sku}</p>
           </div>
           <button
             onClick={onClose}
-            className="w-7 h-7 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-500 flex items-center justify-center flex-shrink-0 transition-colors"
+            className="h-7 px-2.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-gray-700 flex items-center justify-center flex-shrink-0 transition-colors text-xs font-semibold"
           >
-            <X className="w-4 h-4" />
+            Close
           </button>
         </div>
 
@@ -532,7 +727,7 @@ function ProductInfoModal({ product, onClose, onAddToCart }: ProductInfoModalPro
             {product.imageUrl ? (
               <img src={product.imageUrl} alt={product.name} className="w-full h-full object-contain rounded-lg max-h-56" />
             ) : (
-              <div className="flex flex-col items-center gap-2 text-gray-300">
+              <div className="flex flex-col items-center space-y-2 text-gray-300">
                 <Package className="w-16 h-16" />
                 <span className="text-xs text-gray-300">No image</span>
               </div>
@@ -542,7 +737,7 @@ function ProductInfoModal({ product, onClose, onAddToCart }: ProductInfoModalPro
           {/* Details */}
           <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
             {/* Price + stock */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center space-x-3">
               <span className="text-2xl font-bold text-gray-900 tabular-nums">
                 {`₱${product.price.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`}
               </span>
@@ -584,7 +779,7 @@ function ProductInfoModal({ product, onClose, onAddToCart }: ProductInfoModalPro
 
             {/* Tags */}
             {product.tags && product.tags.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-wrap">
                 {product.tags.map((tag) => (
                   <span key={tag} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-md font-medium">{tag}</span>
                 ))}
@@ -615,7 +810,7 @@ function ProductInfoModal({ product, onClose, onAddToCart }: ProductInfoModalPro
           <button
             onClick={() => onAddToCart(product)}
             disabled={isOut}
-            className="w-full flex items-center justify-center gap-2 h-11 bg-brand hover:bg-brand-dark disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-all text-sm"
+            className="w-full flex items-center justify-center space-x-2 h-11 bg-brand hover:bg-brand-dark disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-all text-sm"
           >
             <ShoppingCart className="w-4 h-4" />
             {isOut ? 'Out of Stock' : 'Add to Cart'}
@@ -626,7 +821,7 @@ function ProductInfoModal({ product, onClose, onAddToCart }: ProductInfoModalPro
   )
 }
 
-// ─── Qty Input ─────────────────────────────────────────────────────────────────
+// â"€â"€â"€ Qty Input â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 function QtyInput({ value, onChange }: { value: number; onChange: (n: number) => void }) {
   const [editing, setEditing] = useState(false)
   const [raw, setRaw] = useState(String(value))
@@ -666,7 +861,7 @@ function QtyInput({ value, onChange }: { value: number; onChange: (n: number) =>
   )
 }
 
-// ─── Discount PIN Modal ───────────────────────────────────────────────────────
+// â"€â"€â"€ Discount PIN Modal â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 function DiscountPinModal({
   amount, onConfirm, onCancel,
 }: { amount: number; onConfirm: () => void; onCancel: () => void }) {
@@ -676,7 +871,7 @@ function DiscountPinModal({
 
   const submitPin = useCallback(async (p: string) => {
     setChecking(true)
-    const ok = await verifyDevicePin(p)
+    const ok = await verifyManagerPin(p)
     setChecking(false)
     if (ok) { onConfirm() }
     else    { setError('Incorrect PIN'); setPin('') }
@@ -709,7 +904,7 @@ function DiscountPinModal({
         </div>
 
         {/* PIN dots */}
-        <div className="flex justify-center gap-3 mb-1">
+        <div className="flex justify-center space-x-3 mb-1">
           {[0, 1, 2, 3].map((i) => (
             <div key={i} className={`w-3 h-3 rounded-full border-2 transition-all ${
               pin.length > i ? 'bg-brand border-brand' : 'bg-transparent border-gray-300'
@@ -754,7 +949,7 @@ function DiscountPinModal({
   )
 }
 
-// ─── Cart Panel ───────────────────────────────────────────────────────────────
+// â"€â"€â"€ Cart Panel â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 interface CartPanelProps {
   cart: CartItem[]
   itemCount: number
@@ -790,9 +985,9 @@ function CartPanel({
         {cart.length > 0 && (
           <button
             onClick={() => setShowClearConfirm(true)}
-            className="flex items-center gap-1 text-xs text-gray-400 hover:text-red-500 transition-colors font-medium px-2 py-1 rounded-lg hover:bg-red-50"
+            className="flex items-center space-x-1 text-xs font-semibold text-red-500 border border-red-200 bg-red-50 hover:bg-red-100 transition-colors px-2.5 py-1.5"
           >
-            <Trash2 className="w-3 h-3" /> Clear
+            <Trash2 className="w-3 h-3" /><span>Clear</span>
           </button>
         )}
 
@@ -843,20 +1038,20 @@ function CartPanel({
             const lineTotal = linePrice * item.quantity - item.discount
             return (
               <div key={item.product.id} className="bg-gray-50 rounded-lg overflow-hidden border border-gray-100">
-                <div className="flex items-start gap-2.5 p-3">
+                <div className="flex items-start p-3" style={{ gap: 0 }}>
                   {item.product.imageUrl ? (
                     <img
                       src={item.product.imageUrl}
                       alt={item.product.name}
-                      className="w-9 h-9 rounded-md object-cover flex-shrink-0 border border-gray-200"
+                      className="w-9 h-9 rounded-md object-cover flex-shrink-0 border border-gray-200 mr-2.5"
                     />
                   ) : (
-                    <div className="w-9 h-9 rounded-md bg-gray-200 flex items-center justify-center flex-shrink-0">
+                    <div className="w-9 h-9 rounded-md bg-gray-200 flex items-center justify-center flex-shrink-0 mr-2.5">
                       <Package className="w-4 h-4 text-gray-400" />
                     </div>
                   )}
 
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 mr-2">
                     <p className="text-xs font-medium text-gray-800 line-clamp-1 leading-tight">
                       {item.product.name}
                     </p>
@@ -865,13 +1060,14 @@ function CartPanel({
 
                   <button
                     onClick={() => removeFromCart(item.product.id)}
-                    className="w-5 h-5 rounded flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all flex-shrink-0"
+                    className="w-6 h-6 rounded-md flex items-center justify-center bg-red-100 text-red-500 hover:bg-red-200 hover:text-red-700 transition-all flex-shrink-0"
+                    title="Remove item"
                   >
-                    <X className="w-3 h-3" />
+                    <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
 
-                <div className="flex items-center gap-2 px-3 pb-3">
+                <div className="flex items-center space-x-2 px-3 pb-3">
                   {/* Qty controls */}
                   <div className="flex items-center bg-white border border-gray-200 rounded-lg overflow-hidden">
                     <button
@@ -890,7 +1086,7 @@ function CartPanel({
                   </div>
 
                   {/* Discount */}
-                  <div className="flex items-center gap-1 flex-1">
+                  <div className="flex items-center space-x-1 flex-1">
                     <span className="text-[10px] text-gray-400 font-medium flex-shrink-0">Disc</span>
                     <input
                       type="number"
@@ -939,8 +1135,8 @@ function CartPanel({
         <button
           onClick={() => { onCheckout?.(); navigate('/pos/payment') }}
           disabled={cart.length === 0}
-          className="w-full flex items-center justify-center gap-2 h-12 bg-brand hover:bg-brand-dark
-            disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-lg
+          className="w-full flex items-center justify-center space-x-2 h-12 bg-brand hover:bg-brand-dark
+            disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold
             transition-all shadow-brand/20 shadow-sm text-sm"
         >
           <span>Proceed to Payment</span>
@@ -951,7 +1147,7 @@ function CartPanel({
         {lastTransactionId && cart.length === 0 && (
           <button
             onClick={() => navigate(`/pos/receipt/${lastTransactionId}`)}
-            className="w-full flex items-center justify-center gap-2 text-xs text-gray-400 hover:text-brand py-1.5 rounded-lg hover:bg-brand/5 transition-all font-medium"
+            className="w-full flex items-center justify-center space-x-2 text-xs text-gray-400 hover:text-brand py-1.5 hover:bg-brand/5 transition-all font-medium"
           >
             <Printer className="w-3.5 h-3.5" />
             Reprint last receipt
@@ -976,3 +1172,4 @@ function CartPanel({
     </>
   )
 }
+

@@ -40,6 +40,8 @@ export function Receipt() {
   const locationState = location.state as { transaction?: ReceiptData; autoPrint?: boolean } | null
   const stateReceipt  = locationState?.transaction
   const autoPrint     = locationState?.autoPrint ?? false
+  // When navigated from TransactionDetail (reprint), there's no state.transaction → reprint mode
+  const isPOSFlow = !!stateReceipt
 
   const [receipt,  setReceipt]  = useState<ReceiptData | null>(stateReceipt ?? null)
   const [loading,  setLoading]  = useState(!stateReceipt && !!id)
@@ -180,67 +182,42 @@ export function Receipt() {
       <div className="max-w-sm mx-auto text-center py-16">
         <p className="text-gray-400 text-sm mb-4">Receipt not found.</p>
         <button
-          onClick={() => navigate('/pos')}
-          className="btn-primary flex items-center justify-center gap-2 mx-auto px-6"
+          onClick={() => navigate(-1)}
+          className="btn-secondary flex items-center justify-center space-x-1.5 mx-auto px-6"
         >
-          <ShoppingCart className="w-4 h-4" /> New Sale
+          <ArrowLeft className="w-4 h-4" /><span>Go Back</span>
         </button>
       </div>
     )
   }
 
   return (
-    <div className="max-w-sm mx-auto">
+    <div className="flex h-full min-h-screen print:block">
 
-      {/* ── Actions ─────────────────────────────────────────────────────────── */}
-      <div className="flex gap-2 mb-4 print:hidden">
-        <button
-          onClick={() => navigate(-1)}
-          className="btn-secondary flex items-center gap-1.5 justify-center px-3"
-          title="Go back"
-        >
-          <ArrowLeft className="w-4 h-4" />
-        </button>
-        <button
-          onClick={() => {
-            const thermal = toThermalData()
-            if (thermal) printThermalReceipt(thermal)
-          }}
-          className="btn-primary flex items-center gap-1.5 flex-1 justify-center"
-        >
-          <Printer className="w-4 h-4" /> Print Receipt
-        </button>
-        <button
-          onClick={() => navigate('/pos')}
-          className="btn-secondary flex items-center gap-1.5 justify-center px-3"
-          title="New sale"
-        >
-          <ShoppingCart className="w-4 h-4" />
-        </button>
-      </div>
+      {/* ── LEFT: Scrollable receipt ─────────────────────────────────────── */}
+      <div className="flex-1 overflow-y-auto p-4 print:p-0 flex justify-center">
+        <div className="w-full" style={{ maxWidth: '420px' }}>
 
-      {receipt.offline && (
-        <div className="flex items-center gap-2 bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2 mb-4 text-xs text-yellow-700 font-medium print:hidden">
-          <WifiOff className="w-3.5 h-3.5" />
-          Saved offline — will sync when connected
-        </div>
-      )}
+        {receipt.offline && (
+          <div className="flex items-center space-x-2 bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 mb-3 text-xs text-yellow-700 font-medium print:hidden">
+            <WifiOff className="w-3.5 h-3.5 flex-shrink-0" />
+            <span>Saved offline — will sync when connected</span>
+          </div>
+        )}
 
       {/* ── Receipt — mirrors thermal print layout exactly ───────────────────── */}
       <div id="receipt-print-area">
-        <div className="card font-mono">
+        <div className="card">
 
           {/* Header */}
           <div className="text-center px-5 pt-6 pb-4">
-            <img
-              src="/brand/logo.png"
-              alt={storeName}
-              className="w-12 h-12 object-contain mx-auto mb-2"
-              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
-            />
-            <p className="font-bold text-base leading-snug text-gray-900">{storeName || 'My Store'}</p>
-            {address    && <p className="text-[11px] text-gray-500 mt-1 leading-snug">{address}</p>}
-            {receipt.branchName && <p className="text-[11px] text-gray-400 mt-0.5">{receipt.branchName}</p>}
+            <p className="font-bold text-base leading-snug text-gray-900">
+              {storeName || receipt.branchName || 'TenPOS Store'}
+            </p>
+            {address && <p className="text-[11px] text-gray-500 mt-1 leading-snug">{address}</p>}
+            {receipt.branchName && storeName && storeName !== receipt.branchName && (
+              <p className="text-[11px] text-gray-400 mt-0.5">{receipt.branchName}</p>
+            )}
           </div>
 
           <div className="border-t border-dashed border-gray-300 mx-5" />
@@ -341,12 +318,39 @@ export function Receipt() {
         </div>
       </div>
 
-      <button
-        onClick={() => navigate('/pos')}
-        className="btn-primary w-full flex items-center justify-center gap-2 py-3 mt-4 print:hidden"
-      >
-        <ShoppingCart className="w-4 h-4" /> New Sale
-      </button>
+        </div>{/* end inner centering wrapper */}
+      </div>{/* end left scrollable panel */}
+
+      {/* ── RIGHT: Fixed action buttons ─────────────────────────────────── */}
+      <div className="print:hidden flex-shrink-0 w-48 border-l border-gray-200 bg-white flex flex-col p-4 space-y-3">
+        {!isPOSFlow && (
+          <button
+            onClick={() => navigate(-1)}
+            className="btn-secondary w-full flex items-center justify-center space-x-1.5 py-2.5"
+          >
+            <ArrowLeft className="w-4 h-4" /><span>Back</span>
+          </button>
+        )}
+        <button
+          onClick={() => {
+            const thermal = toThermalData()
+            if (thermal) printThermalReceipt(thermal)
+          }}
+          className="btn-primary w-full py-3"
+        >
+          <Printer className="w-4 h-4" /><span>Print Receipt</span>
+        </button>
+
+        {isPOSFlow && (
+          <button
+            onClick={() => navigate('/pos')}
+            className="btn-primary w-full py-3"
+            style={{ background: '#18181B', borderColor: '#18181B' }}
+          >
+            <ShoppingCart className="w-4 h-4" /><span>New Sale</span>
+          </button>
+        )}
+      </div>
 
     </div>
   )

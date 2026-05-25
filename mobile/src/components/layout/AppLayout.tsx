@@ -16,15 +16,12 @@ export function AppLayout() {
   useEffect(() => { setMobileOpen(false) }, [location.pathname])
 
   const handleToggle = () => {
-    if (window.innerWidth < 768) {
-      setMobileOpen((o) => !o)
-    } else {
-      setCollapsed((c) => {
-        const next = !c
-        try { localStorage.setItem('sidebar-collapsed', String(next)) } catch {}
-        return next
-      })
-    }
+    // TopBar is only rendered at lg:+, so this always runs on desktop
+    setCollapsed((c) => {
+      const next = !c
+      try { localStorage.setItem('sidebar-collapsed', String(next)) } catch {}
+      return next
+    })
   }
 
   return (
@@ -36,14 +33,14 @@ export function AppLayout() {
         paddingTop: 'env(safe-area-inset-top, 0px)',
       }}
     >
-      {/* ── Desktop sidebar — always rendered, collapses to icon rail ──────── */}
-      <div className="hidden md:block">
+      {/* ── Desktop sidebar — shown only on true desktop (≥1024px) ─────────── */}
+      <div className="hidden lg:block">
         <Sidebar collapsed={collapsed} />
       </div>
 
-      {/* ── Mobile sidebar — full-screen overlay, tap backdrop to dismiss ─── */}
+      {/* ── Tablet/mobile sidebar — overlay, shown only when mobileOpen ───── */}
       {mobileOpen && (
-        <div className="md:hidden fixed inset-0 z-50">
+        <div className="lg:hidden fixed inset-0 z-50">
           <div
             className="absolute inset-0 bg-black/50"
             onClick={() => setMobileOpen(false)}
@@ -55,17 +52,17 @@ export function AppLayout() {
       {/* ── Main content area ─────────────────────────────────────────────── */}
       <div
         className={`flex-1 flex flex-col min-w-0 transition-all duration-200 ${
-          collapsed ? 'md:ml-16' : 'md:ml-[240px]'
+          collapsed ? 'lg:ml-16' : 'lg:ml-[240px]'
         }`}
       >
-        {/* TopBar — desktop only; BottomNav handles mobile navigation */}
-        <div className="hidden md:block">
+        {/* TopBar — desktop only (≥1024px); BottomNav handles tablet/mobile */}
+        <div className="hidden lg:block">
           <TopBar onToggleSidebar={handleToggle} />
         </div>
 
         <main
           key={location.pathname}
-          className="flex-1 overflow-y-auto animate-page p-4 md:px-6 md:pt-6"
+          className="flex-1 overflow-y-auto animate-page p-4 lg:px-6 lg:pt-6"
           style={{
             paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)',
           }}
@@ -73,8 +70,8 @@ export function AppLayout() {
           <div className="max-w-screen-xl">
             <Outlet />
           </div>
-          {/* Spacer so content clears the fixed BottomNav on mobile */}
-          <div className="h-16 md:hidden" />
+          {/* Spacer so content clears the fixed BottomNav on tablet/mobile */}
+          <div className="h-16 lg:hidden" />
         </main>
       </div>
 

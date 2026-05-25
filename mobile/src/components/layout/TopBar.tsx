@@ -47,16 +47,16 @@ function Breadcrumb() {
   const lastLabel = ROUTE_LABELS[parts[parts.length - 1]] ?? parts[parts.length - 1]
 
   return (
-    <nav className="flex items-center gap-1 text-sm" aria-label="Breadcrumb">
+    <nav className="flex items-center space-x-1 text-sm" aria-label="Breadcrumb">
       {/* Mobile: current page title only */}
       <span className="sm:hidden font-medium text-gray-800 text-sm leading-none">{lastLabel}</span>
       {/* Desktop: full breadcrumb */}
-      <span className="hidden sm:flex items-center gap-1">
+      <span className="hidden sm:flex items-center space-x-1">
         {parts.map((seg, i) => {
           const label = ROUTE_LABELS[seg] ?? seg
           const isLast = i === parts.length - 1
           return (
-            <span key={seg} className="flex items-center gap-1">
+            <span key={seg} className="flex items-center space-x-1">
               {i > 0 && <ChevronRight className="w-3 h-3 text-gray-300 flex-shrink-0" />}
               <span className={`font-medium leading-none ${isLast ? 'text-gray-800 text-sm' : 'text-gray-400 text-sm hover:text-gray-600 transition-colors'}`}>
                 {label}
@@ -82,7 +82,7 @@ function SyncIndicator({ status }: { status: SyncStatus }) {
   const Icon = c.icon
 
   return (
-    <div className={`flex items-center gap-1.5 text-xs font-medium ${c.cls}`} title={c.label}>
+    <div className={`flex items-center space-x-1 text-xs font-medium ${c.cls}`} title={c.label}>
       <Icon className={`w-3.5 h-3.5 ${status === 'syncing' ? 'animate-spin' : ''}`} />
       <span className="hidden lg:inline">{c.label}</span>
     </div>
@@ -106,7 +106,7 @@ function ProfileMenu({ user }: { user: User }) {
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+        className="flex items-center space-x-2 px-2 py-1.5 rounded-lg hover:bg-gray-100 transition-colors"
       >
         <div className="w-7 h-7 rounded-md overflow-hidden flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
           style={{ background: '#E5484D' }}>
@@ -130,14 +130,14 @@ function ProfileMenu({ user }: { user: User }) {
           <Link
             to="/profile"
             onClick={() => setOpen(false)}
-            className="flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+            className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
           >
             Profile Settings
           </Link>
           <div className="border-t border-gray-100 mt-1 pt-1">
             <button
               onClick={() => { setOpen(false); triggerLogout() }}
-              className="flex items-center gap-2.5 px-3 py-2 w-full text-sm text-red-600 hover:bg-red-50 transition-colors"
+              className="flex items-center space-x-2 px-3 py-2 w-full text-sm text-red-600 hover:bg-red-50 transition-colors"
             >
               Sign out
             </button>
@@ -154,10 +154,10 @@ export function TopBar({ onToggleSidebar }: TopBarProps) {
   const { user } = useAuthStore()
 
   return (
-    <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-4 gap-4 flex-shrink-0">
+    <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-4 flex-shrink-0">
 
       {/* ── LEFT: toggle + breadcrumb ─────────────────────────────────── */}
-      <div className="flex items-center gap-3 min-w-0">
+      <div className="flex items-center space-x-3 min-w-0">
         <button
           onClick={onToggleSidebar}
           className="w-8 h-8 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors flex items-center justify-center flex-shrink-0"
@@ -169,12 +169,12 @@ export function TopBar({ onToggleSidebar }: TopBarProps) {
       </div>
 
       {/* ── RIGHT: status + notifications + profile ──────────────────── */}
-      <div className="flex items-center gap-3 flex-shrink-0">
+      <div className="flex items-center space-x-3 flex-shrink-0">
         <SyncIndicator status={syncStatus} />
 
         {/* Branch indicator */}
         {user?.branch && (
-          <div className="hidden lg:flex items-center gap-1.5 text-xs text-gray-500 font-medium px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg">
+          <div className="hidden lg:flex items-center space-x-1 text-xs text-gray-500 font-medium px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg">
             <MapPin className="w-3 h-3 text-gray-400" />
             <span className="truncate max-w-[120px]">{user.branch}</span>
           </div>

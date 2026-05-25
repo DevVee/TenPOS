@@ -1,13 +1,11 @@
 ﻿import { useState, useEffect } from 'react'
-import { AlertTriangle, Download, ShoppingCart, Loader2, Package } from 'lucide-react'
+import { AlertTriangle, ShoppingCart, Loader2, Package, Search } from 'lucide-react'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Badge } from '../../components/ui/Badge'
 import { apiGetLowStock } from '../../lib/api'
 import { supabase } from '../../lib/supabase'
 import { useApiData } from '../../hooks/useApiData'
-import { downloadXLSX } from '../../lib/xlsxExport'
-
 function fmt(n: number) { return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2 })}` }
 
 interface LowStockItem {
@@ -17,6 +15,7 @@ interface LowStockItem {
 
 export function LowStock() {
   const [tick, setTick] = useState(0)
+  const [search, setSearch] = useState('')
   const { data, loading, error } = useApiData<LowStockItem[]>(
     () => apiGetLowStock() as Promise<LowStockItem[]>, [tick],
   )
@@ -37,35 +36,16 @@ export function LowStock() {
   // Sort: critical first (stock ≤ 2), then low
   const sorted = [...items].sort((a, b) => Number(a.stock) - Number(b.stock))
 
-  const handleExport = () => {
-    downloadXLSX(
-      `TenPOS-Reorder-List-${new Date().toISOString().slice(0, 10)}`,
-      [{
-        name: 'Reorder List',
-        columns: [
-          { header: 'Product',          width: 32 },
-          { header: 'SKU',              width: 16 },
-          { header: 'Category',         width: 20 },
-          { header: 'Current Stock',    type: 'number', width: 14 },
-          { header: 'Reorder Point',    type: 'number', width: 14 },
-          { header: 'Suggested Order',  type: 'number', width: 16 },
-          { header: 'Unit Cost',        type: 'money',  width: 14 },
-          { header: 'Est. Reorder Cost',type: 'money',  width: 18 },
-        ],
-        rows: items.map((p) => [
-          p.product_name, p.sku, p.category_name,
-          Number(p.stock), Number(p.reorder_point), REORDER_QTY,
-          Number(p.cost), Number(p.cost) * REORDER_QTY,
-        ]),
-        totalsRow: [
-          `${items.length} items to reorder`, '', '', '', '',
-          items.length * REORDER_QTY, '',
-          items.reduce((s, p) => s + Number(p.cost) * REORDER_QTY, 0),
-        ],
-      }],
-      'Reorder List'
+  // Search filter
+  const displayItems = sorted.filter((p) => {
+    if (!search) return true
+    const q = search.toLowerCase()
+    return (
+      p.product_name.toLowerCase().includes(q) ||
+      p.sku.toLowerCase().includes(q) ||
+      (p.category_name && p.category_name.toLowerCase().includes(q))
     )
-  }
+  })
 
   return (
     <div>
@@ -78,16 +58,22 @@ export function LowStock() {
               ? `${items.length} products need reordering · Est. reorder cost ${fmt(totalReorderCost)}`
               : 'All products are well stocked'
         }
-        actions={
-          <button onClick={handleExport} className="btn-secondary">
-            <Download className="w-3.5 h-3.5" /> Export Reorder List
-          </button>
-        }
       />
 
       {error && (
         <div className="mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-100 text-sm text-red-600">{error}</div>
       )}
+
+      {/* Search */}
+      <div className="relative mb-4">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+        <input
+          className="input-base pl-9 w-full"
+          placeholder="Search by name, SKU or category…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </div>
 
       {loading ? (
         <div className="flex items-center justify-center h-48">
@@ -104,7 +90,7 @@ export function LowStock() {
       ) : (
         <>
           {/* Alert banner */}
-          <div className="flex items-start gap-3 px-4 py-3.5 mb-5 bg-amber-50 border border-amber-200 rounded-xl">
+          <div className="flex items-start px-4 py-3.5 mb-5 bg-amber-50 border border-amber-200 rounded-xl" style={{ gap: '12px' }}>
             <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
             <div>
               <p className="text-sm font-medium text-amber-800">
@@ -131,7 +117,14 @@ export function LowStock() {
                 </tr>
               </thead>
               <tbody>
-                {sorted.map((p) => {
+                {displayItems.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-400">
+                      No matching products found
+                    </td>
+                  </tr>
+                )}
+                {displayItems.map((p) => {
                   const isCritical = Number(p.stock) <= 2
                   const pct = Math.min(100, (Number(p.stock) / Math.max(1, Number(p.reorder_point) * 2.5)) * 100)
                   return (
@@ -144,7 +137,7 @@ export function LowStock() {
                         <span className="text-sm text-gray-500">{p.category_name}</span>
                       </td>
                       <td>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center space-x-2">
                           <span className={`text-sm font-semibold tabular-nums ${isCritical ? 'text-red-600' : 'text-amber-600'}`}>
                             {p.stock}
                           </span>

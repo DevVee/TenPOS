@@ -1,10 +1,9 @@
 ﻿import { useState } from 'react'
-import { Search, Download, Shield, Loader2 } from 'lucide-react'
+import { Search, Shield, Loader2 } from 'lucide-react'
 import { Badge } from '../../components/ui/Badge'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { apiGetAuditLog } from '../../lib/api'
 import { useApiData } from '../../hooks/useApiData'
-import { downloadXLSX } from '../../lib/xlsxExport'
 
 interface AuditEntry {
   id: string
@@ -38,25 +37,6 @@ export function AuditLog() {
 
   const entries = data?.data ?? []
 
-  const handleExport = () => {
-    downloadXLSX(
-      `TenPOS-Audit-Log-${new Date().toISOString().slice(0, 10)}`,
-      [{
-        name: 'Audit Log',
-        columns: [
-          { header: 'Severity',  width: 12 },
-          { header: 'Action',    width: 32 },
-          { header: 'User',      width: 22 },
-          { header: 'Details',   width: 44 },
-          { header: 'IP Address',width: 16 },
-          { header: 'Timestamp', type: 'date', width: 22 },
-        ],
-        rows: filtered.map((a) => [a.severity, a.action, a.user, a.details, a.ip, a.timestamp]),
-      }],
-      'Audit Log'
-    )
-  }
-
   const filtered = entries.filter((a) => {
     if (!search) return true
     const q = search.toLowerCase()
@@ -72,9 +52,6 @@ export function AuditLog() {
       <PageHeader
         title="Audit Log"
         subtitle="Immutable record of all system actions"
-        actions={
-          <button onClick={handleExport} className="btn-secondary flex items-center gap-1.5"><Download className="w-4 h-4" /> Export Log</button>
-        }
       />
 
       <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 mb-4 flex items-center gap-2.5">
@@ -86,7 +63,7 @@ export function AuditLog() {
         <div className="card p-4 mb-4 text-sm text-red-600 bg-red-50 border-red-100">{error}</div>
       )}
 
-      <div className="flex flex-wrap gap-3 mb-4">
+      <div className="flex flex-wrap mb-4" style={{ gap: '12px' }}>
         <div className="relative flex-1 min-w-48">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
@@ -96,13 +73,13 @@ export function AuditLog() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <div className="flex gap-1.5 overflow-x-auto pb-0.5" style={{ scrollbarWidth: 'none' }}>
+        <div className="flex overflow-x-auto pb-0.5 space-x-1.5" style={{ scrollbarWidth: 'none' }}>
           {['all', 'info', 'warning', 'critical'].map((s) => (
             <button
               key={s}
               onClick={() => setSeverity(s)}
-              className={`px-3 py-2 rounded-lg text-xs font-medium capitalize transition-colors ${
-                severity === s ? 'bg-brand text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+              className={`flex-shrink-0 px-3 py-2 text-xs font-semibold capitalize transition-colors border ${
+                severity === s ? 'bg-brand text-white border-brand' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
               }`}
             >{s}</button>
           ))}

@@ -21,9 +21,8 @@ const config: CapacitorConfig = {
     },
     // Splash screen — keep brief
     SplashScreen: {
-      launchShowDuration: 1000,
-      backgroundColor: '#111318',
-      androidScaleType: 'CENTER_CROP',
+      launchShowDuration: 0,   // skip native splash — the HTML loading screen handles branding
+      backgroundColor: '#E5484D',
       showSpinner: false,
     },
   },

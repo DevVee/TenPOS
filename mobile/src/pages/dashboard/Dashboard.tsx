@@ -143,9 +143,9 @@ export function Dashboard() {
         title="Dashboard"
         subtitle={`${new Date().toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}`}
         actions={
-          <button onClick={() => navigate('/pos')} className="btn-primary">
-            <ShoppingCart className="w-3.5 h-3.5" />
-            Open POS
+          <button onClick={() => navigate('/pos')} className="btn-primary min-w-[148px] px-5">
+            <ShoppingCart className="w-4 h-4" />
+            <span>Open POS</span>
           </button>
         }
       />
@@ -157,7 +157,7 @@ export function Dashboard() {
       ) : (
         <>
           {/* ── Row 1: KPI strip ──────────────────────────────────────────── */}
-          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-5 mb-5 md:mb-7">
+          <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4 mb-5 md:mb-7">
             <StatCard
               label="Today's Revenue"
               value={s ? fmt(Number(s.total_revenue)) : '—'}
@@ -208,7 +208,7 @@ export function Dashboard() {
                   <p className="text-sm font-semibold text-gray-800">Revenue This Week</p>
                   <p className="text-xs text-gray-400 mt-0.5">Daily sales overview</p>
                 </div>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center space-x-1">
                   <span className="w-2 h-2 rounded-full bg-brand" />
                   <span className="text-xs text-gray-400">Revenue</span>
                 </div>
@@ -226,14 +226,19 @@ export function Dashboard() {
                     <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
                     <XAxis
                       dataKey="day"
-                      tick={{ fontSize: 11, fill: '#9CA3AF', fontWeight: 500 }}
+                      tick={{ fontSize: 11, fill: '#9CA3AF', fontWeight: 500, fontFamily: 'Roboto, system-ui, sans-serif' }}
                       axisLine={false} tickLine={false} dy={6}
                     />
                     <YAxis
-                      tick={{ fontSize: 11, fill: '#9CA3AF', fontWeight: 500 }}
+                      tick={{ fontSize: 11, fill: '#9CA3AF', fontWeight: 500, fontFamily: 'Roboto, system-ui, sans-serif' }}
                       axisLine={false} tickLine={false}
-                      tickFormatter={(v) => v >= 1000 ? `₱${(v / 1000).toFixed(0)}k` : `₱${v}`}
-                      width={44}
+                      tickFormatter={(v) => {
+                        if (v === 0) return '0'
+                        if (v >= 1000000) return `${(v / 1000000).toFixed(1)}M`
+                        if (v >= 1000) return `${(v / 1000).toFixed(0)}k`
+                        return String(v)
+                      }}
+                      width={40}
                     />
                     <Tooltip
                       content={<ChartTooltip />}
@@ -274,18 +279,18 @@ export function Dashboard() {
               ) : (
                 <div className="space-y-4">
                   {topProducts.slice(0, 5).map((p, i) => (
-                    <div key={p.product_name} className="flex items-start gap-3">
+                    <div key={p.product_name} className="flex items-start space-x-3">
                       <span className={`text-[11px] font-bold w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 mt-0.5 ${rankStyle(i)}`}>
                         {i + 1}
                       </span>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2 mb-1">
+                        <div className="flex items-center justify-between mb-1">
                           <p className="text-xs font-medium text-gray-700 truncate">{p.product_name}</p>
                           <span className="text-xs font-semibold text-gray-900 flex-shrink-0 tabular-nums">
                             {fmt(Number(p.revenue))}
                           </span>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center space-x-2">
                           <div className="flex-1 h-1 bg-gray-100 rounded-full overflow-hidden">
                             <div
                               className="h-full bg-brand rounded-full"
@@ -311,7 +316,7 @@ export function Dashboard() {
                 <p className="text-sm font-semibold text-gray-800">Recent Transactions</p>
                 <button
                   onClick={() => navigate('/transactions')}
-                  className="flex items-center gap-1 text-xs text-brand hover:text-brand-dark font-medium transition-colors"
+                  className="flex items-center space-x-1 text-xs text-brand hover:text-brand-dark font-medium transition-colors"
                 >
                   View all <ArrowRight className="w-3 h-3" />
                 </button>
@@ -372,7 +377,7 @@ export function Dashboard() {
                 <p className="text-sm font-semibold text-gray-800">Low Stock</p>
                 <button
                   onClick={() => navigate('/inventory/low-stock')}
-                  className="flex items-center gap-1 text-xs text-brand hover:text-brand-dark font-medium transition-colors"
+                  className="flex items-center space-x-1 text-xs text-brand hover:text-brand-dark font-medium transition-colors"
                 >
                   View all <ArrowRight className="w-3 h-3" />
                 </button>
@@ -391,15 +396,15 @@ export function Dashboard() {
                     const pct = stockPct(item)
                     const isCritical = item.stock <= 2
                     return (
-                      <div key={item.product_name} className="flex items-start gap-3 px-5 py-3.5">
+                      <div key={item.product_name} className="flex items-start space-x-3 px-5 py-3.5">
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-2 mb-1.5">
+                          <div className="flex items-center justify-between mb-1.5">
                             <p className="text-xs font-medium text-gray-700 truncate">{item.product_name}</p>
                             <Badge variant={isCritical ? 'red' : 'yellow'}>
                               {isCritical ? 'Critical' : 'Low'}
                             </Badge>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center space-x-2">
                             <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                               <div
                                 className={`h-full rounded-full ${isCritical ? 'bg-red-500' : 'bg-amber-400'}`}

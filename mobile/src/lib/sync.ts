@@ -345,7 +345,28 @@ export async function pullAll(branchId?: string): Promise<void> {
 
 // ─── Push: submit transaction ─────────────────────────────────────────────────
 
+// Prevent concurrent submissions (double-tap / React StrictMode double-invoke)
+let _txnSubmitting = false
+
 export async function submitTransaction(
+  payload: {
+    branch_id: string
+    items: { product_id: string; variant_id?: string; quantity: number; unit_price: number; discount: number; note?: string }[]
+    payments: { method: string; amount: number; reference?: string }[]
+    discount: number
+    voucher_code?: string
+  }
+): Promise<{ receipt_no: string; id: string; offline: boolean }> {
+  if (_txnSubmitting) throw new Error('A payment is already being processed. Please wait.')
+  _txnSubmitting = true
+  try {
+    return await _doSubmitTransaction(payload)
+  } finally {
+    _txnSubmitting = false
+  }
+}
+
+async function _doSubmitTransaction(
   payload: {
     branch_id: string
     items: { product_id: string; variant_id?: string; quantity: number; unit_price: number; discount: number; note?: string }[]
@@ -567,14 +588,36 @@ export async function flushOfflineQueue(): Promise<{ synced: number; failed: num
       })
       synced++
     } catch (err) {
-      const attempts = (txn.attempts ?? 0) + 1
-      await markTransactionFailed(txn.id, (err as Error).message, attempts)
-      appendSyncLog({
-        timestamp: Date.now(),
-        type: 'failed',
-        detail: `Failed to sync ${txn.localId}: ${(err as Error).message}`,
-      })
-      failed++
+      const msg = (err as Error).message ?? ''
+      // ── Constraint violation = transaction already exists on server ──────────
+      // This happens when: (a) the network timed out after the server committed,
+      // (b) the app crashed between commit and markSynced.
+      // Treat it as success so the queue entry doesn't retry forever.
+      const isConstraintViolation =
+        msg.toLowerCase().includes('violates') ||
+        msg.toLowerCase().includes('duplicate') ||
+        msg.toLowerCase().includes('unique') ||
+        msg.toLowerCase().includes('already exists')
+
+      if (isConstraintViolation) {
+        await markTransactionSynced(txn.id)
+        await db.offlineQueue.delete(txn.id)
+        appendSyncLog({
+          timestamp: Date.now(),
+          type: 'info',
+          detail: `Skipped duplicate txn (already on server): ${txn.localId}`,
+        })
+        synced++
+      } else {
+        const attempts = (txn.attempts ?? 0) + 1
+        await markTransactionFailed(txn.id, msg, attempts)
+        appendSyncLog({
+          timestamp: Date.now(),
+          type: 'failed',
+          detail: `Failed to sync ${txn.localId}: ${msg}`,
+        })
+        failed++
+      }
     }
   }
 

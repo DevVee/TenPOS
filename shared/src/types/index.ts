@@ -64,7 +64,7 @@ export interface CartItem {
   note?: string
 }
 
-export type PaymentMethod = 'cash' | 'gcash' | 'paymaya' | 'card'
+export type PaymentMethod = 'cash' | 'gcash' | 'paymaya' | 'card' | 'ewallet' | 'bank'
 
 export interface Payment {
   method: PaymentMethod

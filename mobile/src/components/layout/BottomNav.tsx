@@ -148,14 +148,14 @@ function MoreDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
     <>
       {/* Backdrop */}
       <div
-        className={`fixed inset-0 z-40 bg-black/40 md:hidden transition-opacity duration-300
+        className={`fixed inset-0 z-40 bg-black/40 lg:hidden transition-opacity duration-300
           ${open ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
         onClick={onClose}
       />
 
       {/* Full-screen panel — slides DOWN from top */}
       <div
-        className={`fixed inset-0 z-50 md:hidden bg-white flex flex-col
+        className={`fixed inset-0 z-50 lg:hidden bg-white flex flex-col
           transition-transform duration-300 ease-out
           ${open ? 'translate-y-0' : '-translate-y-full'}`}
         style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
@@ -204,7 +204,7 @@ function MoreDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
                       <div key={item.label}>
                         <button
                           onClick={() => toggle(item.label)}
-                          className={`flex items-center gap-3 w-full px-3 py-3 rounded-xl text-sm font-medium transition-colors
+                          className={`flex items-center space-x-3 w-full px-3 py-3 rounded-xl text-sm font-medium transition-colors
                             ${active ? 'bg-red-50' : 'hover:bg-gray-50'}`}
                         >
                           <Icon
@@ -229,7 +229,7 @@ function MoreDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
                                 <button
                                   key={child.to}
                                   onClick={() => handleNav(child.to)}
-                                  className={`flex items-center gap-2 w-full px-3 py-2.5 rounded-lg text-sm transition-colors
+                                  className={`flex items-center space-x-2 w-full px-3 py-2.5 rounded-lg text-sm transition-colors
                                     ${childActive
                                       ? 'text-brand font-semibold bg-red-50'
                                       : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50'
@@ -250,7 +250,7 @@ function MoreDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
                     <button
                       key={item.to}
                       onClick={() => handleNav(item.to)}
-                      className={`flex items-center gap-3 w-full px-3 py-3 rounded-xl text-sm font-medium transition-colors
+                      className={`flex items-center space-x-3 w-full px-3 py-3 rounded-xl text-sm font-medium transition-colors
                         ${active ? 'bg-red-50' : 'hover:bg-gray-50'}`}
                     >
                       <Icon
@@ -271,7 +271,7 @@ function MoreDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
             {user && (
               <button
                 onClick={() => handleNav('/profile')}
-                className={`flex items-center gap-3 w-full px-3 py-3 rounded-xl transition-colors
+                className={`flex items-center space-x-3 w-full px-3 py-3 rounded-xl transition-colors
                   ${pathname === '/profile' ? 'bg-red-50' : 'hover:bg-gray-50'}`}
               >
                 <div
@@ -292,7 +292,7 @@ function MoreDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
 
             <button
               onClick={handleLogout}
-              className="flex items-center gap-3 w-full px-3 py-3 rounded-xl text-sm font-medium text-red-500 hover:bg-red-50 transition-colors mt-1"
+              className="flex items-center space-x-3 w-full px-3 py-3 rounded-xl text-sm font-medium text-red-500 hover:bg-red-50 transition-colors mt-1"
             >
               <svg className="w-5 h-5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
@@ -334,15 +334,15 @@ export function BottomNav() {
       {/* ── Floating cart bar ─────────────────────────────────────────────── */}
       {cartCount > 0 && !onPOS && (
         <div
-          className="fixed left-0 right-0 z-40 px-4 pb-1 md:hidden"
+          className="fixed left-0 right-0 z-40 px-4 pb-1 lg:hidden"
           style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 60px)' }}
         >
           <button
             onClick={() => navigate('/pos')}
-            className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-2xl text-white text-sm font-semibold shadow-lg active:scale-[0.98] transition-transform"
+            className="w-full flex items-center justify-between px-4 py-3 rounded-2xl text-white text-sm font-semibold shadow-lg active:scale-[0.98] transition-transform"
             style={{ background: '#E5484D' }}
           >
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center space-x-2">
               <ShoppingCart className="w-4 h-4" />
               <span>View Cart</span>
             </div>
@@ -358,7 +358,7 @@ export function BottomNav() {
 
       {/* ── Bottom tab bar ────────────────────────────────────────────────── */}
       <nav
-        className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-gray-100 md:hidden"
+        className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-gray-100 lg:hidden"
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
         <div className="flex items-stretch h-[60px]">
@@ -372,7 +372,7 @@ export function BottomNav() {
               <Link
                 key={tab.to}
                 to={tab.to}
-                className="flex-1 flex flex-col items-center justify-center gap-1 relative select-none"
+                className="flex-1 flex flex-col items-center justify-center space-y-1 relative select-none"
                 style={{ WebkitTapHighlightColor: 'transparent' }}
               >
                 {active && (
@@ -409,7 +409,7 @@ export function BottomNav() {
           {/* More tab — toggles the drawer */}
           <button
             onClick={() => setMoreOpen((o) => !o)}
-            className="flex-1 flex flex-col items-center justify-center gap-1 relative select-none"
+            className="flex-1 flex flex-col items-center justify-center space-y-1 relative select-none"
             style={{ WebkitTapHighlightColor: 'transparent' }}
           >
             {moreActive && !moreOpen && (

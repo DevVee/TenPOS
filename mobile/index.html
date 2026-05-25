@@ -13,18 +13,7 @@
     <link rel="manifest" href="/manifest.json" />
     <title>TenPOS</title>
 
-    <!-- Non-blocking font load: preload the CSS, swap to all on load -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="preload" as="style"
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" />
-    <link rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
-      media="print" onload="this.media='all'" />
-    <noscript>
-      <link rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" />
-    </noscript>
+    <!-- System fonts only — Google Fonts CDN is unreachable from Capacitor WebView -->
 
     <!-- Inline loading screen — visible immediately, before any JS parses -->
     <style>
@@ -33,21 +22,23 @@
       #app-loading{
         position:fixed;inset:0;z-index:9999;
         display:flex;flex-direction:column;align-items:center;justify-content:center;
-        gap:20px;background:#fff;
+        background:#fff;
       }
       #app-loading .logo-wrap{
-        width:72px;height:72px;border-radius:20px;
+        width:96px;height:96px;border-radius:24px;
         background:#E5484D;display:flex;align-items:center;justify-content:center;
-        box-shadow:0 8px 24px rgba(229,72,77,.30);
+        box-shadow:0 12px 32px rgba(229,72,77,.35);
+        margin-bottom:24px;
       }
-      #app-loading .logo-wrap img{width:48px;height:48px;object-fit:contain}
+      #app-loading .logo-wrap img{width:64px;height:64px;object-fit:contain}
       #app-loading .spinner{
-        width:32px;height:32px;border-radius:50%;
+        width:40px;height:40px;border-radius:50%;
         border:3px solid #fee2e2;border-top-color:#E5484D;
         animation:tenpos-spin .75s linear infinite;
+        margin-bottom:20px;
       }
       #app-loading p{
-        color:#9ca3af;font-size:13px;
+        color:#9ca3af;font-size:15px;
         font-family:system-ui,-apple-system,sans-serif;
         letter-spacing:.02em;
       }

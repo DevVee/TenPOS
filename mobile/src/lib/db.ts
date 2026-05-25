@@ -304,3 +304,46 @@ export function hasDevicePin(): boolean {
 export function clearDevicePin(): void {
   localStorage.removeItem(PIN_HASH_KEY)
 }
+
+// ─── Manager override PIN ─────────────────────────────────────────────────────
+// Stored in Supabase (staff.override_pin_hash) as a PBKDF2 "salt:hash" string
+// and cached here in localStorage so verification works offline.
+// Call apiLoadManagerPin() after login to warm the cache.
+
+const MANAGER_PIN_KEY = 'tenpos_manager_pin_hash'
+
+/** Create a PBKDF2 "salt:hash" string from a raw PIN — to send to the DB. */
+export async function createPinHash(pin: string): Promise<string> {
+  const { hash, salt } = await _pbkdf2(pin)
+  return `${salt}:${hash}`
+}
+
+/** Cache the manager PIN hash (fetched from DB) into localStorage. */
+export function setManagerPinHash(hash: string): void {
+  localStorage.setItem(MANAGER_PIN_KEY, hash)
+}
+
+/** Verify a raw PIN against the manager PIN hash cached in localStorage. */
+export async function verifyManagerPin(pin: string): Promise<boolean> {
+  const stored = localStorage.getItem(MANAGER_PIN_KEY)
+  if (!stored) return false
+  const colonIdx = stored.indexOf(':')
+  if (colonIdx === -1) {
+    // legacy plain SHA-256 (migrated automatically)
+    const legacyHash = await _sha256(pin)
+    return legacyHash === stored
+  }
+  const saltHex  = stored.slice(0, colonIdx)
+  const hashHex  = stored.slice(colonIdx + 1)
+  const saltBytes = new Uint8Array((saltHex.match(/../g) ?? []).map((b) => parseInt(b, 16)))
+  const { hash } = await _pbkdf2(pin, saltBytes)
+  return hash === hashHex
+}
+
+export function hasManagerPin(): boolean {
+  return !!localStorage.getItem(MANAGER_PIN_KEY)
+}
+
+export function clearManagerPin(): void {
+  localStorage.removeItem(MANAGER_PIN_KEY)
+}

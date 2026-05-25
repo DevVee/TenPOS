@@ -9,13 +9,13 @@ import { App as CapApp } from '@capacitor/app'
 import { apiValidateVoucher } from '../../lib/api'
 import type { Payment as PaymentType } from '../../types'
 
-type PayMethod = 'cash' | 'gcash' | 'paymaya' | 'card'
+type PayMethod = 'cash' | 'ewallet' | 'bank' | 'card'
 
 const METHODS: { id: PayMethod; label: string; icon: React.ElementType; color: string }[] = [
-  { id: 'cash',    label: 'Cash',    icon: Banknote,    color: 'bg-green-50  border-green-200  text-green-700' },
-  { id: 'gcash',   label: 'GCash',   icon: Smartphone,  color: 'bg-blue-50   border-blue-200   text-blue-700'  },
-  { id: 'paymaya', label: 'PayMaya', icon: Smartphone,  color: 'bg-purple-50 border-purple-200 text-purple-700' },
-  { id: 'card',    label: 'Card',    icon: CreditCard,  color: 'bg-orange-50 border-orange-200 text-orange-700' },
+  { id: 'cash',    label: 'Cash',     icon: Banknote,    color: 'bg-green-50  border-green-200  text-green-700'  },
+  { id: 'ewallet', label: 'E-Wallet', icon: Smartphone,  color: 'bg-blue-50   border-blue-200   text-blue-700'   },
+  { id: 'bank',    label: 'Bank',     icon: Smartphone,  color: 'bg-purple-50 border-purple-200 text-purple-700' },
+  { id: 'card',    label: 'Card',     icon: CreditCard,  color: 'bg-orange-50 border-orange-200 text-orange-700' },
 ]
 
 function fmt(n: number) { return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2 })}` }
@@ -141,16 +141,16 @@ export function Payment() {
           <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-xs p-6 z-10 text-center">
             <h3 className="text-base font-bold text-gray-900 mb-2">Leave Payment?</h3>
             <p className="text-sm text-gray-500 mb-5">Your cart items will be preserved, but payment details will be cleared.</p>
-            <div className="flex gap-3">
+            <div className="flex space-x-3">
               <button
                 onClick={() => setShowLeaveConfirm(false)}
-                className="flex-1 h-11 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all"
+                className="flex-1 h-11 rounded-xl border-2 border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all"
               >
                 Stay
               </button>
               <button
                 onClick={() => navigate('/pos')}
-                className="flex-1 h-11 rounded-xl bg-brand text-white text-sm font-semibold hover:bg-brand-dark transition-all"
+                className="flex-1 h-11 rounded-xl bg-brand text-white text-sm font-bold hover:bg-brand-dark transition-all shadow-md shadow-brand/25"
               >
                 Leave
               </button>
@@ -246,7 +246,7 @@ export function Payment() {
                 </div>
               ) : (
                 <div>
-                  <div className="flex gap-2">
+                  <div className="flex space-x-2">
                     <input
                       className="input-base flex-1 uppercase text-sm font-bold tracking-wider"
                       placeholder="Enter promo code…"
@@ -257,9 +257,9 @@ export function Payment() {
                     <button
                       onClick={handleApplyVoucher}
                       disabled={voucherLoading || !voucherCode.trim()}
-                      className="btn-secondary px-4 disabled:opacity-50 text-sm font-bold"
+                      className="btn-primary px-5 disabled:opacity-50 text-sm font-bold shadow-sm"
                     >
-                      {voucherLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Apply'}
+                      {voucherLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>Apply</span>}
                     </button>
                   </div>
                   {voucherResult && !voucherResult.valid && (
@@ -282,7 +282,7 @@ export function Payment() {
                   <button
                     key={m.id}
                     onClick={() => setMethod(m.id)}
-                    className={`flex flex-col items-center gap-2 py-4 px-2 rounded-2xl border-2 transition-all ${
+                    className={`flex flex-col items-center space-y-2 py-4 px-2 rounded-2xl border-2 transition-all ${
                       method === m.id
                         ? `${m.color} border-2 shadow-md`
                         : 'border-gray-100 bg-white hover:bg-gray-50 hover:border-gray-200'
@@ -317,8 +317,8 @@ export function Payment() {
                   />
                 </div>
 
-                {/* Quick amounts */}
-                <div className="flex flex-wrap gap-2 mt-3">
+                {/* Quick amounts — CSS Grid works in Chrome 66+ */}
+                <div className="grid grid-cols-4 gap-2 mt-3">
                   {QUICK_CASH.map((v) => (
                     <button
                       key={v}
@@ -360,7 +360,7 @@ export function Payment() {
             )}
 
             {/* Digital payment reference */}
-            {(method === 'gcash' || method === 'paymaya') && (
+            {(method === 'ewallet' || method === 'bank') && (
               <div className="card p-4">
                 <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-3">Reference Number</p>
                 <input

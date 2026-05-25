@@ -5,9 +5,12 @@ import { App as CapApp } from '@capacitor/app'
 import { Capacitor } from '@capacitor/core'
 import { useAuthStore } from './store/authStore'
 import { usePOSStore } from './store/posStore'
-import { startSyncLoop, stopSyncLoop, refreshProductCache, refreshInventoryCache, onSyncEvent, getPendingCount, isOnline } from './lib/sync'
+import { startSyncLoop, stopSyncLoop, refreshProductCache, refreshInventoryCache, onSyncEvent, getPendingCount, isOnline, flushOfflineQueue } from './lib/sync'
+import { apiLoadManagerPin } from './lib/api'
 import { subscribeTransactions, subscribeStock, subscribeProducts, subscribeCategories, unsubscribeAll } from './lib/realtime'
 import { useSettingsStore } from './store/settingsStore'
+import { usePrinterStore } from './store/printerStore'
+import { connectDevice, checkConnection } from './lib/bluetoothPrint'
 
 // ── Eager: shown on first load — must be instant ──────────────────────────────
 import { Login }   from './pages/auth/Login'
@@ -90,7 +93,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
 function PageLoader() {
   return (
     <div className="min-h-screen bg-white flex items-center justify-center">
-      <div className="flex flex-col items-center gap-3">
+      <div className="flex flex-col items-center space-y-3">
         <div className="w-8 h-8 border-[3px] border-red-100 border-t-brand rounded-full animate-spin" />
         <span className="text-xs text-gray-300 font-medium">Loading…</span>
       </div>
@@ -167,7 +170,7 @@ function RequireAuth({ children }: { children: ReactNode }) {
   const { isAuthenticated, isLoading, pinLocked } = useAuthStore()
   if (isLoading) return (
     <div className="min-h-screen bg-white flex items-center justify-center">
-      <div className="flex flex-col items-center gap-3">
+      <div className="flex flex-col items-center space-y-3">
         <div className="w-8 h-8 border-[3px] border-red-500 border-t-transparent rounded-full animate-spin" />
         <span className="text-xs text-gray-400 font-medium">Loading…</span>
       </div>
@@ -212,19 +215,32 @@ function SyncBootstrap() {
     // Initial cache warm-up
     void refreshProductCache()
     void refreshInventoryCache()
+    // Load manager PIN hash from DB into localStorage for offline use
+    void apiLoadManagerPin()
 
     // Helper to re-evaluate current status (async-safe)
     const updateStatus = () => {
       void isOnline().then((online) => {
         if (!online) { setSyncStatus('offline'); return }
         void getPendingCount().then((n) => {
-          setSyncStatus(n > 0 ? 'pending' : 'online')
           setPendingCount(n)
+          if (n > 0) {
+            // Auto-flush instead of sitting "pending" forever
+            setSyncStatus('syncing')
+            void flushOfflineQueue().then(() => {
+              void getPendingCount().then((remaining) => {
+                setSyncStatus(remaining > 0 ? 'pending' : 'online')
+                setPendingCount(remaining)
+              })
+            })
+          } else {
+            setSyncStatus('online')
+          }
         })
       })
     }
 
-    const handleOnline  = () => { setSyncStatus('syncing'); updateStatus() }
+    const handleOnline  = () => { setSyncStatus('syncing'); void flushOfflineQueue().then(updateStatus) }
     const handleOffline = () => setSyncStatus('offline')
 
     // Web fallback listeners (Capacitor replaces these natively in startSyncLoop)
@@ -293,6 +309,33 @@ function RealtimeBootstrap() {
   return null
 }
 
+/**
+ * KeyboardScrollFix — on Capacitor native (tablet/phone APK), when the soft
+ * keyboard appears and shrinks the visual viewport, scroll the focused input
+ * into view so it isn't hidden behind the keyboard.
+ * Noop on web (adjustResize via AndroidManifest already handles phones).
+ */
+function KeyboardScrollFix() {
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return
+    const vv = window.visualViewport
+    if (!vv) return
+    const handleResize = () => {
+      const el = document.activeElement
+      if (
+        el &&
+        (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT')
+      ) {
+        // Small delay lets the browser finish resizing before we scroll
+        setTimeout(() => el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 60)
+      }
+    }
+    vv.addEventListener('resize', handleResize)
+    return () => vv.removeEventListener('resize', handleResize)
+  }, [])
+  return null
+}
+
 /** Android hardware back-button: navigate back, or minimize app if at root */
 function AndroidBackHandler() {
   const navigate = useNavigate()
@@ -349,7 +392,7 @@ function SplashScreen({ onDone }: { onDone: () => void }) {
       <div className="absolute -bottom-16 -left-16 w-48 h-48 rounded-full bg-white/5 pointer-events-none" />
 
       {/* Logo + wordmark */}
-      <div className="relative z-10 flex flex-col items-center gap-5">
+      <div className="relative z-10 flex flex-col items-center space-y-5">
         <div className="w-20 h-20 rounded-2xl bg-white shadow-xl flex items-center justify-center">
           <img
             src="/brand/logo.png"
@@ -367,7 +410,7 @@ function SplashScreen({ onDone }: { onDone: () => void }) {
       </div>
 
       {/* Animated dots */}
-      <div className="absolute bottom-14 flex items-center gap-2">
+      <div className="absolute bottom-14 flex items-center space-x-2">
         {[0, 150, 300].map((delay) => (
           <div
             key={delay}
@@ -378,6 +421,50 @@ function SplashScreen({ onDone }: { onDone: () => void }) {
       </div>
     </div>
   )
+}
+
+/**
+ * PrinterBootstrap — auto-reconnects the saved Bluetooth printer on app launch
+ * and whenever the app returns to the foreground.
+ * Only runs on Capacitor native (Android). No-op on web.
+ */
+function PrinterBootstrap() {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
+  const { savedDevice, setStatus } = usePrinterStore()
+
+  const tryReconnect = async () => {
+    if (!savedDevice) return
+    try {
+      const ok = await checkConnection()
+      if (ok) {
+        setStatus('connected')
+        return
+      }
+      setStatus('connecting')
+      const result = await connectDevice(savedDevice.address)
+      setStatus(result.isConnected || result.code === 0 ? 'connected' : 'idle')
+    } catch {
+      setStatus('idle')
+    }
+  }
+
+  useEffect(() => {
+    if (!isAuthenticated || !Capacitor.isNativePlatform() || !savedDevice) return
+
+    // Try to connect on mount (app launch / login)
+    void tryReconnect()
+
+    // Re-connect whenever the app comes back to foreground
+    let listener: { remove: () => Promise<void> } | null = null
+    void CapApp.addListener('appStateChange', ({ isActive }) => {
+      if (isActive) void tryReconnect()
+    }).then((h) => { listener = h })
+
+    return () => { void listener?.remove() }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, savedDevice?.address])
+
+  return null
 }
 
 export default function App() {
@@ -397,6 +484,8 @@ export default function App() {
         <SessionRestorer />
         <SyncBootstrap />
         <RealtimeBootstrap />
+        <PrinterBootstrap />
+        <KeyboardScrollFix />
         <AndroidBackHandler />
         <BoundedRoutes />
       </BrowserRouter>

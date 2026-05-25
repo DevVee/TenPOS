@@ -140,20 +140,20 @@ export function Categories() {
                       >{cat.name}</span>
                     )}
                   </div>
-                  <div className="col-span-3 flex justify-end gap-1">
+                  <div className="col-span-3 flex justify-end gap-1.5">
                     <button
                       onClick={() => openEdit(cat.id, cat.name)}
-                      className="p-1.5 text-gray-300 hover:text-brand transition-colors"
+                      className="flex items-center gap-1 h-8 px-3 border border-gray-200 bg-white hover:bg-gray-50 hover:border-brand hover:text-brand text-gray-600 text-xs font-medium transition-colors"
                       title="Edit"
                     >
-                      <Pencil className="w-3.5 h-3.5" />
+                      <Pencil className="w-3.5 h-3.5" /> Edit
                     </button>
                     <button
                       onClick={() => setDeleteId(cat.id)}
-                      className="p-1.5 text-gray-300 hover:text-red-400 transition-colors"
+                      className="flex items-center gap-1 h-8 px-3 border border-red-200 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-medium transition-colors"
                       title="Delete"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Trash2 className="w-3.5 h-3.5" /> Delete
                     </button>
                   </div>
                 </div>

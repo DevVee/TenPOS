@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Printer, RotateCcw, XCircle, Loader2, AlertCircle, KeyRound, Eye, EyeOff, Minus, Plus } from 'lucide-react'
 import { Badge } from '../../components/ui/Badge'
 import { Modal } from '../../components/ui/Modal'
-import { apiGetTransaction, apiVoidTransaction, apiVoidWithPin, apiReturnTransaction } from '../../lib/api'
+import { apiGetTransaction, apiVoidTransaction, apiVoidWithPin, apiReturnWithPin, verifyManagerPin } from '../../lib/api'
 import { useApiData } from '../../hooks/useApiData'
 import { useAuthStore } from '../../store/authStore'
 
@@ -35,7 +35,10 @@ export function TransactionDetail() {
 
   // Return modal state
   const [returnModal,   setReturnModal]   = useState(false)
+  const [returnStep,    setReturnStep]    = useState<'items' | 'pin'>('items')
   const [returnQtys,    setReturnQtys]    = useState<Record<string, number>>({})
+  const [returnPin,     setReturnPin]     = useState('')
+  const [showReturnPin, setShowReturnPin] = useState(false)
   const [returning,     setReturning]     = useState(false)
   const [returnError,   setReturnError]   = useState('')
   const [returnSuccess, setReturnSuccess] = useState(false)
@@ -56,20 +59,33 @@ export function TransactionDetail() {
     const initial: Record<string, number> = {}
     tx.items.forEach((i) => { initial[i.id] = i.quantity })
     setReturnQtys(initial)
+    setReturnStep('items')
+    setReturnPin(''); setShowReturnPin(false)
     setReturnError('')
     setReturnSuccess(false)
     setReturnModal(true)
   }
 
+  const handleReturnNextStep = () => {
+    const items = tx?.items.filter((i) => (returnQtys[i.id] ?? 0) > 0) ?? []
+    if (items.length === 0) { setReturnError('Select at least one item to return.'); return }
+    setReturnError('')
+    setReturnPin(''); setShowReturnPin(false)
+    setReturnStep('pin')
+  }
+
   const handleReturn = async () => {
     if (!tx) return
+    // Verify PIN locally first
+    const pinOk = await verifyManagerPin(returnPin)
+    if (!pinOk) { setReturnError('Incorrect manager PIN.'); return }
     const items = tx.items
       .map((i) => ({ item_id: i.id, quantity: returnQtys[i.id] ?? 0 }))
       .filter((i) => i.quantity > 0)
     if (items.length === 0) { setReturnError('Select at least one item to return.'); return }
     setReturning(true); setReturnError('')
     try {
-      await apiReturnTransaction(tx.id, items)
+      await apiReturnWithPin(tx.id, items, returnPin)
       setReturnSuccess(true)
       setTimeout(() => { setReturnModal(false); refetch() }, 1500)
     } catch (err) {
@@ -118,7 +134,9 @@ export function TransactionDetail() {
     setVoiding(true); setVoidError('')
     try {
       if (isCashier) {
-        if (!/^\d{4,8}$/.test(managerPin)) { setVoidError('PIN must be 4–8 digits.'); setVoiding(false); return }
+        // Verify PIN locally against the cached manager hash before calling API
+        const pinOk = await verifyManagerPin(managerPin)
+        if (!pinOk) { setVoidError('Incorrect manager PIN.'); setVoiding(false); return }
         await apiVoidWithPin(id, voidReason.trim(), managerPin)
       } else {
         await apiVoidTransaction(id, voidReason.trim())
@@ -126,8 +144,7 @@ export function TransactionDetail() {
       setVoidModal(false)
       refetch()
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to void transaction'
-      setVoidError(msg.includes('INVALID_PIN') ? 'Incorrect PIN. Please try again.' : msg)
+      setVoidError(err instanceof Error ? err.message : 'Failed to void transaction')
     } finally {
       setVoiding(false)
     }
@@ -388,9 +405,9 @@ export function TransactionDetail() {
         </div>
       </Modal>
 
-      {/* Return modal — inline item selection */}
+      {/* Return modal — Step 1: select items */}
       <Modal
-        open={returnModal}
+        open={returnModal && returnStep === 'items'}
         onClose={() => setReturnModal(false)}
         title="Process Return"
       >
@@ -463,20 +480,70 @@ export function TransactionDetail() {
                   <AlertCircle className="w-4 h-4" /> {returnError}
                 </div>
               )}
-
               <div className="flex justify-end gap-2 pt-1">
                 <button onClick={() => setReturnModal(false)} className="btn-secondary">Cancel</button>
                 <button
-                  onClick={handleReturn}
-                  disabled={returning || tx.items.every((i) => (returnQtys[i.id] ?? 0) === 0)}
+                  onClick={handleReturnNextStep}
+                  disabled={tx.items.every((i) => (returnQtys[i.id] ?? 0) === 0)}
                   className="bg-yellow-500 hover:bg-yellow-600 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
                 >
-                  {returning && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  Confirm Return
+                  Next — Enter PIN →
                 </button>
               </div>
             </>
           )}
+        </div>
+      </Modal>
+
+      {/* Return modal — Step 2: Manager PIN */}
+      <Modal
+        open={returnModal && returnStep === 'pin'}
+        onClose={() => setReturnModal(false)}
+        title="Manager Authorization"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-2 p-3 bg-blue-50 rounded-lg text-sm text-blue-800">
+            <KeyRound className="w-4 h-4 mt-0.5 flex-shrink-0" />
+            <span>Enter the manager PIN to authorize this return.</span>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">Manager Override PIN</label>
+            <div className="relative">
+              <input
+                type={showReturnPin ? 'text' : 'password'}
+                inputMode="numeric"
+                maxLength={8}
+                className="input-base pr-10 text-center tracking-widest text-lg"
+                placeholder="••••"
+                value={returnPin}
+                onChange={(e) => setReturnPin(e.target.value.replace(/\D/g, ''))}
+                autoFocus
+              />
+              <button
+                type="button"
+                onClick={() => setShowReturnPin(!showReturnPin)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                {showReturnPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+          {returnError && (
+            <div className="flex items-center gap-2 text-sm text-red-600">
+              <AlertCircle className="w-4 h-4" /> {returnError}
+            </div>
+          )}
+          <div className="flex justify-end gap-2 pt-1">
+            <button onClick={() => setReturnStep('items')} className="btn-secondary">← Back</button>
+            <button
+              onClick={handleReturn}
+              disabled={returnPin.length < 4 || returning}
+              className="bg-yellow-500 hover:bg-yellow-600 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+            >
+              {returning && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              Authorize &amp; Return
+            </button>
+          </div>
         </div>
       </Modal>
     </div>

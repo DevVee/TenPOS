@@ -42,3 +42,4 @@ supabase.md
 *.secrets
 secrets.*
 credentials.*
+.vercel

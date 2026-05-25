@@ -1,12 +1,10 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Printer, RotateCcw, XCircle, Loader2, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Printer, RotateCcw, XCircle, Loader2, AlertCircle, Lock } from 'lucide-react'
 import { Badge } from '../../components/ui/Badge'
 import { Modal } from '../../components/ui/Modal'
-import { apiGetTransaction, apiVoidTransaction, apiVoidWithPin, apiReturnTransaction } from '../../lib/api'
-import { useSettingsStore } from '../../store/settingsStore'
-import { useAuthStore } from '../../store/authStore'
-import { verifyDevicePin } from '../../lib/db'
+import { apiGetTransaction, apiVoidWithPin, apiReturnWithPin } from '../../lib/api'
+import { verifyManagerPin } from '../../lib/db'
 import { useApiData } from '../../hooks/useApiData'
 
 function fmt(n: number) { return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2 })}` }
@@ -22,8 +20,6 @@ interface TxDetail {
 export function TransactionDetail() {
   const navigate = useNavigate()
   const { id } = useParams<{ id: string }>()
-  const { user } = useAuthStore()
-  const settings = useSettingsStore()
 
   // ── Void ─────────────────────────────────────────────────────────────────
   const [voidModal, setVoidModal]   = useState(false)
@@ -33,33 +29,30 @@ export function TransactionDetail() {
   const [voidError, setVoidError]   = useState('')
 
   // ── Return ────────────────────────────────────────────────────────────────
-  const [returnModal, setReturnModal]   = useState(false)
-  const [returnQtys, setReturnQtys]     = useState<Record<string, number>>({})
-  const [returnReason, setReturnReason] = useState('')
-  const [returning, setReturning]       = useState(false)
-  const [returnError, setReturnError]   = useState('')
+  const [returnModal, setReturnModal]       = useState(false)
+  const [returnQtys, setReturnQtys]         = useState<Record<string, number>>({})
+  const [returnReason, setReturnReason]     = useState('')
+  const [returnReasonOther, setReturnReasonOther] = useState('')
+  const [returnPin, setReturnPin]           = useState('')
+  const [returning, setReturning]           = useState(false)
+  const [returnError, setReturnError]       = useState('')
+
+  const RETURN_REASONS = ['Defective item', 'Wrong size', 'Wrong color', 'Wrong item', 'Customer changed mind', 'Duplicate order', 'Other']
+  const effectiveReturnReason = returnReason === 'Other' ? returnReasonOther.trim() : returnReason
 
   const { data: tx, loading, error, refetch } = useApiData<TxDetail>(
     () => apiGetTransaction(id!) as Promise<TxDetail>,
     [id]
   )
 
-  /** PIN auth needed for void when setting is on and user is cashier */
-  const requiresVoidPin = settings.requirePinForVoid && user?.role === 'cashier'
-
   const handleVoid = async () => {
     if (!voidReason.trim() || !id) return
+    const ok = await verifyManagerPin(voidPin)
+    if (!ok) { setVoidError('Incorrect manager PIN.'); return }
     setVoiding(true)
     setVoidError('')
     try {
-      if (requiresVoidPin) {
-        // Cashier path — verify device PIN locally (works offline)
-        const ok = await verifyDevicePin(voidPin)
-        if (!ok) { setVoidError('Incorrect PIN.'); setVoiding(false); return }
-        await apiVoidWithPin(id, voidReason.trim(), voidPin)
-      } else {
-        await apiVoidTransaction(id, voidReason.trim())
-      }
+      await apiVoidWithPin(id, voidReason.trim(), voidPin)
       setVoidModal(false)
       setVoidReason(''); setVoidPin('')
       refetch()
@@ -77,20 +70,23 @@ export function TransactionDetail() {
     tx.items.forEach((item) => { init[item.id] = 0 })
     setReturnQtys(init)
     setReturnReason('')
+    setReturnPin('')
     setReturnError('')
     setReturnModal(true)
   }
 
   const handleReturn = async () => {
     if (!id || !tx) return
+    const ok = await verifyManagerPin(returnPin)
+    if (!ok) { setReturnError('Incorrect manager PIN.'); return }
     const items = tx.items
       .filter((item) => (returnQtys[item.id] ?? 0) > 0)
-      .map((item) => ({ item_id: item.id, quantity: returnQtys[item.id], reason: returnReason.trim() || undefined }))
+      .map((item) => ({ item_id: item.id, quantity: returnQtys[item.id], reason: effectiveReturnReason || undefined }))
     if (items.length === 0) { setReturnError('Select at least one item to return.'); return }
     setReturning(true)
     setReturnError('')
     try {
-      await apiReturnTransaction(id, items)
+      await apiReturnWithPin(id, items, returnPin)
       setReturnModal(false)
       refetch()
     } catch (err) {
@@ -143,8 +139,10 @@ export function TransactionDetail() {
             <p className="text-sm text-gray-400">{date}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge variant={tx.status === 'completed' ? 'green' : tx.status === 'voided' ? 'red' : 'yellow'}>{tx.status}</Badge>
+        <div className="flex items-center space-x-2">
+          <Badge variant={tx.status === 'completed' ? 'green' : tx.status === 'voided' ? 'red' : 'yellow'}>
+            {tx.status.charAt(0).toUpperCase() + tx.status.slice(1)}
+          </Badge>
         </div>
       </div>
 
@@ -233,26 +231,26 @@ export function TransactionDetail() {
       </div>
 
       {/* Action buttons */}
-      <div className="flex gap-2">
+      <div className="flex space-x-2">
         <button
           onClick={handleReprint}
-          className="btn-secondary flex items-center gap-1.5 flex-1 justify-center"
+          className="flex items-center space-x-1.5 flex-1 justify-center h-11 px-3 rounded-xl border-2 border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
         >
-          <Printer className="w-4 h-4" /> Reprint Receipt
+          <Printer className="w-4 h-4" /><span>Reprint</span>
         </button>
         {tx.status === 'completed' && (
           <>
             <button
               onClick={openReturnModal}
-              className="btn-secondary flex items-center gap-1.5 flex-1 justify-center text-yellow-600 border-yellow-200 hover:bg-yellow-50"
+              className="flex items-center space-x-1.5 flex-1 justify-center h-11 px-3 rounded-xl border-2 border-amber-300 bg-amber-50 text-sm font-semibold text-amber-700 hover:bg-amber-100 transition-colors"
             >
-              <RotateCcw className="w-4 h-4" /> Return
+              <RotateCcw className="w-4 h-4" /><span>Return</span>
             </button>
             <button
               onClick={() => setVoidModal(true)}
-              className="btn-secondary flex items-center gap-1.5 flex-1 justify-center text-red-600 border-red-200 hover:bg-red-50"
+              className="flex items-center space-x-1.5 flex-1 justify-center h-11 px-3 rounded-xl border-2 border-red-300 bg-red-50 text-sm font-semibold text-red-600 hover:bg-red-100 transition-colors"
             >
-              <XCircle className="w-4 h-4" /> Void
+              <XCircle className="w-4 h-4" /><span>Void</span>
             </button>
           </>
         )}
@@ -273,33 +271,33 @@ export function TransactionDetail() {
               onChange={(e) => setVoidReason(e.target.value)}
             />
           </div>
-          {requiresVoidPin && (
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                Manager PIN required <span className="text-brand">*</span>
-              </label>
-              <input
-                type="password"
-                className="input-base font-mono tracking-widest"
-                placeholder="Enter your 4-digit PIN"
-                maxLength={4}
-                value={voidPin}
-                onChange={(e) => setVoidPin(e.target.value.replace(/\D/g, ''))}
-              />
-              <p className="text-xs text-gray-400 mt-1">Void transactions require PIN authorization.</p>
-            </div>
-          )}
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">
+              <span className="flex items-center" style={{ gap: '4px' }}>
+                <Lock className="w-3 h-3 text-gray-500" /> Manager PIN required
+              </span>
+            </label>
+            <input
+              type="password"
+              inputMode="numeric"
+              className="input-base font-mono tracking-widest"
+              placeholder="Enter manager PIN"
+              maxLength={8}
+              value={voidPin}
+              onChange={(e) => setVoidPin(e.target.value.replace(/\D/g, ''))}
+            />
+          </div>
           {voidError && (
-            <div className="flex items-center gap-2 text-sm text-red-600">
+            <div className="flex items-center text-sm text-red-600" style={{ gap: '8px' }}>
               <AlertCircle className="w-4 h-4" /> {voidError}
             </div>
           )}
-          <div className="flex justify-end gap-2 pt-1">
+          <div className="flex justify-end space-x-2 pt-1">
             <button onClick={() => { setVoidModal(false); setVoidReason(''); setVoidPin(''); setVoidError('') }} className="btn-secondary">Cancel</button>
             <button
               onClick={handleVoid}
-              disabled={!voidReason.trim() || voiding || (requiresVoidPin && voidPin.length < 4)}
-              className="bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+              disabled={!voidReason.trim() || !voidPin || voiding}
+              className="bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center" style={{ gap: '8px' }}
             >
               {voiding && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               Confirm Void
@@ -341,12 +339,23 @@ export function TransactionDetail() {
 
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1.5">Return Reason</label>
-            <input
+            <select
               className="input-base"
-              placeholder="e.g. Defective item, wrong size"
               value={returnReason}
-              onChange={(e) => setReturnReason(e.target.value)}
-            />
+              onChange={(e) => { setReturnReason(e.target.value); if (e.target.value !== 'Other') setReturnReasonOther('') }}
+            >
+              <option value="">Select a reason…</option>
+              {RETURN_REASONS.map((r) => <option key={r} value={r}>{r}</option>)}
+            </select>
+            {returnReason === 'Other' && (
+              <input
+                className="input-base mt-2"
+                placeholder="Describe the reason…"
+                value={returnReasonOther}
+                onChange={(e) => setReturnReasonOther(e.target.value)}
+                autoFocus
+              />
+            )}
           </div>
 
           {/* Refund preview */}
@@ -360,17 +369,34 @@ export function TransactionDetail() {
             ) : null
           })()}
 
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">
+              <span className="flex items-center" style={{ gap: '4px' }}>
+                <Lock className="w-3 h-3 text-gray-500" /> Manager PIN required
+              </span>
+            </label>
+            <input
+              type="password"
+              inputMode="numeric"
+              className="input-base font-mono tracking-widest"
+              placeholder="Enter manager PIN"
+              maxLength={8}
+              value={returnPin}
+              onChange={(e) => setReturnPin(e.target.value.replace(/\D/g, ''))}
+            />
+          </div>
+
           {returnError && (
-            <div className="flex items-center gap-2 text-sm text-red-600">
+            <div className="flex items-center text-sm text-red-600" style={{ gap: '8px' }}>
               <AlertCircle className="w-4 h-4" /> {returnError}
             </div>
           )}
-          <div className="flex justify-end gap-2 pt-1">
+          <div className="flex justify-end space-x-2 pt-1">
             <button onClick={() => setReturnModal(false)} className="btn-secondary">Cancel</button>
             <button
               onClick={handleReturn}
-              disabled={returning || Object.values(returnQtys).every((q) => q === 0)}
-              className="bg-yellow-500 hover:bg-yellow-600 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+              disabled={returning || !returnPin || Object.values(returnQtys).every((q) => q === 0) || (returnReason === 'Other' && !returnReasonOther.trim())}
+              className="bg-yellow-500 hover:bg-yellow-600 disabled:opacity-50 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center" style={{ gap: '8px' }}
             >
               {returning && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               Confirm Return

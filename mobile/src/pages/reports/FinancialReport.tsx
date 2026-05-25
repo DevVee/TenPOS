@@ -1,6 +1,5 @@
 import { useState } from 'react'
-import { Download, Printer, Loader2, TrendingUp, TrendingDown, DollarSign, ShoppingBag } from 'lucide-react'
-import { downloadXLSX } from '../../lib/xlsxExport'
+import { Loader2, TrendingUp, TrendingDown, DollarSign, ShoppingBag } from 'lucide-react'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatCard } from '../../components/ui/StatCard'
 import { apiFinancialReport } from '../../lib/api'
@@ -54,111 +53,57 @@ export function FinancialReport() {
     cash: '#27AE60', gcash: '#2980B9', card: '#6B7280', paymaya: '#8E44AD',
   }
 
-  const handlePrint = () => window.print()
-
-  const handleExport = () => {
-    const d = data
-
-    downloadXLSX(
-      `TenPOS-Financial-${dateFrom}${isSingleDay ? '' : `-to-${dateTo}`}`,
-      [
-        // Sheet 1: P&L Summary
-        {
-          name: 'P&L Summary',
-          periodLabel,
-          columns: [
-            { header: 'Line Item',    width: 28 },
-            { header: 'Amount (₱)',   type: 'money', width: 22 },
-            { header: 'Notes',        width: 30 },
-          ],
-          rows: [
-            ['Revenue',           d?.revenue ?? 0,       'Total sales (completed transactions)'],
-            ['Cost of Goods',     -(d?.cogs ?? 0),       'Cost price x units sold'],
-            ['Gross Profit',      d?.gross_profit ?? 0,  'Revenue - COGS'],
-            ['Gross Margin %',    Number(d?.gross_margin ?? 0), ''],
-            ['Stock Value',       d?.stock_value ?? 0,   'Current inventory at cost'],
-            ['Transactions',      d?.transaction_count ?? 0, 'Number of completed sales'],
-          ],
-          totalsRow: ['NET PROFIT (Gross)', d?.gross_profit ?? 0, ''],
-        },
-
-        // Sheet 2: Payment Breakdown
-        {
-          name: 'Payment Methods',
-          periodLabel,
-          columns: [
-            { header: 'Payment Method', width: 22 },
-            { header: 'Amount (₱)',     type: 'money',   width: 18 },
-            { header: '% of Total',     type: 'percent', width: 14 },
-          ],
-          rows: payments.map((p) => [
-            p.method.charAt(0).toUpperCase() + p.method.slice(1),
-            p.total,
-            totalPayments > 0 ? p.total / totalPayments : 0,
-          ]),
-          totalsRow: [
-            'TOTAL',
-            totalPayments,
-            1,
-          ],
-        },
-      ],
-      'Financial Report'
-    )
-  }
-
   return (
     <div>
       <PageHeader
         title="Financial Report"
         subtitle={`P&L and payment breakdown · ${periodLabel}`}
-        actions={
-          <div className="flex flex-wrap gap-2 items-center">
-            {/* Date range */}
-            <div className="flex items-center gap-1.5 text-xs">
-              <label className="text-gray-400 text-xs font-medium">From</label>
-              <input
-                type="date"
-                value={dateFrom}
-                max={dateTo}
-                onChange={(e) => setDateFrom(e.target.value)}
-                className="input-base text-sm py-2"
-              />
-              <label className="text-gray-400 text-xs font-medium">To</label>
-              <input
-                type="date"
-                value={dateTo}
-                min={dateFrom}
-                max={today}
-                onChange={(e) => setDateTo(e.target.value)}
-                className="input-base text-sm py-2"
-              />
-            </div>
-
-            {/* Quick presets */}
-            <div className="flex rounded-xl border border-gray-200 overflow-hidden text-xs">
-              {([
-                { label: 'Today',  from: today, to: today },
-                { label: 'Week',   from: isoDate(new Date(Date.now() - 7  * 86400000)), to: today },
-                { label: 'Month',  from: isoDate(new Date(Date.now() - 30 * 86400000)), to: today },
-              ]).map((p) => (
-                <button
-                  key={p.label}
-                  onClick={() => { setDateFrom(p.from); setDateTo(p.to) }}
-                  className={`px-3 py-2 font-bold transition-colors ${
-                    dateFrom === p.from && dateTo === p.to
-                      ? 'bg-brand text-white'
-                      : 'text-gray-500 hover:bg-gray-50'
-                  }`}
-                >{p.label}</button>
-              ))}
-            </div>
-
-            <button onClick={handlePrint}  className="btn-secondary flex items-center gap-1.5"><Printer className="w-4 h-4" /> Print</button>
-            <button onClick={handleExport} className="btn-secondary flex items-center gap-1.5"><Download className="w-4 h-4" /> Export Excel</button>
-          </div>
-        }
       />
+
+      {/* ── Filter bar ───────────────────────────────────────────────────── */}
+      <div className="flex flex-wrap items-center mb-5" style={{ gap: '8px' }}>
+        {/* Quick presets */}
+        <div className="flex border border-gray-200 overflow-hidden text-xs">
+          {([
+            { label: 'Today',  from: today, to: today },
+            { label: 'Week',   from: isoDate(new Date(Date.now() - 7  * 86400000)), to: today },
+            { label: 'Month',  from: isoDate(new Date(Date.now() - 30 * 86400000)), to: today },
+          ]).map((p) => (
+            <button
+              key={p.label}
+              onClick={() => { setDateFrom(p.from); setDateTo(p.to) }}
+              className={`px-3 py-2 font-bold transition-colors ${
+                dateFrom === p.from && dateTo === p.to
+                  ? 'bg-brand text-white'
+                  : 'text-gray-500 hover:bg-gray-50'
+              }`}
+            >{p.label}</button>
+          ))}
+        </div>
+
+        <div className="flex-1" />
+
+        {/* Date range inputs */}
+        <div className="flex items-center space-x-1.5 text-xs">
+          <label className="text-gray-400 font-medium">From</label>
+          <input
+            type="date"
+            value={dateFrom}
+            max={dateTo}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="input-base text-sm py-1.5"
+          />
+          <label className="text-gray-400 font-medium">To</label>
+          <input
+            type="date"
+            value={dateTo}
+            min={dateFrom}
+            max={today}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="input-base text-sm py-1.5"
+          />
+        </div>
+      </div>
 
       {loading ? (
         <div className="flex items-center justify-center h-48">
@@ -166,7 +111,7 @@ export function FinancialReport() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+          <div className="grid grid-cols-2 gap-3 mb-5">
             <StatCard label="Revenue"      value={fmt(data?.revenue ?? 0)}                    icon={DollarSign}  iconColor="emerald" />
             <StatCard label="Gross Profit" value={fmt(data?.gross_profit ?? 0)}               icon={TrendingUp}  iconColor="blue"    />
             <StatCard label="Gross Margin" value={`${data?.gross_margin ?? '0'}%`}             icon={TrendingUp}  iconColor="violet"  />

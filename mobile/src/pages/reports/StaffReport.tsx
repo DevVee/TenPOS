@@ -1,6 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Download, Loader2, CalendarRange } from 'lucide-react'
-import { downloadXLSX } from '../../lib/xlsxExport'
+import { Loader2, CalendarRange } from 'lucide-react'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatCard } from '../../components/ui/StatCard'
 import { Users, TrendingUp, ShoppingBag } from 'lucide-react'
@@ -27,14 +26,6 @@ function presetDates(p: Exclude<Period, 'custom'>): Record<string, string> {
   return { from: from + 'T00:00:00', to: today + 'T23:59:59' }
 }
 
-function periodLabel(period: Period, from: string, to: string): string {
-  if (period === 'custom') {
-    const f = new Date(from + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
-    const t = new Date(to   + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
-    return `${f} — ${t}`
-  }
-  return { today: 'Today', week: 'Last 7 days', month: 'Last 30 days' }[period] ?? ''
-}
 
 export function StaffReport() {
   const [period,      setPeriod]      = useState<Period>('week')
@@ -64,9 +55,9 @@ export function StaffReport() {
     [allStaff, cashierFilter]
   )
 
-  const totalTxns    = staff.reduce((s, m) => s + m.transaction_count, 0)
-  const totalRevenue = staff.reduce((s, m) => s + m.revenue, 0)
-  const best         = staff[0]
+  const totalTxns    = staff.reduce((s, m) => s + Number(m.transaction_count), 0)
+  const totalRevenue = staff.reduce((s, m) => s + Number(m.revenue), 0)
+  const best         = [...staff].sort((a, b) => Number(b.revenue) - Number(a.revenue))[0]
 
   const barData = staff.map((s) => ({
     name:         s.name.split(' ')[0],
@@ -74,108 +65,46 @@ export function StaffReport() {
     Transactions: s.transaction_count,
   }))
 
-  const label = periodLabel(period, customFrom, customTo)
-
-  const handleExport = () => {
-    const today = isoDate(new Date())
-
-    downloadXLSX(
-      `TenPOS-Staff-${today}`,
-      [
-        // Sheet 1: Per-cashier performance
-        {
-          name: 'Performance',
-          periodLabel: label,
-          columns: [
-            { header: '#',              type: 'number', width: 6 },
-            { header: 'Staff Name',     width: 26 },
-            { header: 'Role',           width: 14 },
-            { header: 'Transactions',   type: 'number', width: 14 },
-            { header: 'Items Sold',     type: 'number', width: 12 },
-            { header: 'Revenue (₱)',    type: 'money',  width: 18 },
-            { header: 'Avg Order (₱)',  type: 'money',  width: 16 },
-            { header: 'Revenue Share',  type: 'percent', width: 14 },
-          ],
-          rows: allStaff.map((s, i) => {
-            const avg = s.transaction_count > 0 ? s.revenue / s.transaction_count : 0
-            const pct = totalRevenue > 0 ? s.revenue / totalRevenue : 0
-            return [i + 1, s.name, s.role, s.transaction_count, s.items_sold, s.revenue, avg, pct]
-          }),
-          totalsRow: [
-            '', 'TEAM TOTAL', '', totalTxns,
-            allStaff.reduce((s, m) => s + m.items_sold, 0),
-            totalRevenue,
-            totalTxns > 0 ? totalRevenue / totalTxns : 0,
-            1,
-          ],
-        },
-
-        // Sheet 2: Summary
-        {
-          name: 'Summary',
-          periodLabel: label,
-          columns: [
-            { header: 'Metric', width: 28 },
-            { header: 'Value',  width: 22 },
-          ],
-          rows: [
-            ['Period',             label],
-            ['Active Cashiers',    String(allStaff.length)],
-            ['Total Transactions', String(totalTxns)],
-            ['Total Revenue',      fmt(totalRevenue)],
-            ['Team Avg Order',     fmt(totalTxns > 0 ? totalRevenue / totalTxns : 0)],
-            ['Best Performer',     best?.name ?? '—'],
-            ['Best Revenue',       best ? fmt(best.revenue) : '—'],
-            ['Best Txns',          best ? String(best.transaction_count) : '—'],
-          ],
-        },
-      ],
-      'Staff Performance Report'
-    )
-  }
-
   return (
     <div>
       <PageHeader
         title="Staff Performance"
         subtitle="Sales performance per cashier"
-        actions={
-          <div className="flex flex-wrap gap-2 items-center">
-            {/* Period tabs */}
-            <div className="flex rounded-xl border border-gray-200 overflow-hidden text-xs">
-              {(['today', 'week', 'month', 'custom'] as Period[]).map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setPeriod(t)}
-                  className={`px-3 py-2 font-bold capitalize transition-colors ${t === period ? 'bg-brand text-white' : 'text-gray-500 hover:bg-gray-50'}`}
-                >
-                  {t === 'custom' ? <CalendarRange className="w-3.5 h-3.5 inline -mt-0.5" /> : t}
-                </button>
-              ))}
-            </div>
-
-            {/* Custom date range */}
-            {period === 'custom' && (
-              <div className="flex items-center gap-1.5 text-xs">
-                <input type="date" value={customFrom} max={customTo} onChange={(e) => setCustomFrom(e.target.value)} className="input-base py-1.5 text-xs" />
-                <span className="text-gray-400">to</span>
-                <input type="date" value={customTo} min={customFrom} max={isoDate(new Date())} onChange={(e) => setCustomTo(e.target.value)} className="input-base py-1.5 text-xs" />
-              </div>
-            )}
-
-            {/* Cashier filter */}
-            {cashiers.length > 2 && (
-              <select value={cashierFilter} onChange={(e) => setCashierFilter(e.target.value)} className="input-base py-1.5 text-xs">
-                {cashiers.map((c) => <option key={c}>{c}</option>)}
-              </select>
-            )}
-
-            <button onClick={handleExport} className="btn-secondary flex items-center gap-1.5">
-              <Download className="w-4 h-4" /> Export Excel
-            </button>
-          </div>
-        }
       />
+
+      {/* ── Filter bar ───────────────────────────────────────────────────── */}
+      <div className="flex flex-wrap items-center mb-5" style={{ gap: '8px' }}>
+        {/* Cashier filter — left */}
+        {cashiers.length > 2 && (
+          <select value={cashierFilter} onChange={(e) => setCashierFilter(e.target.value)} className="input-base py-1.5 text-xs">
+            {cashiers.map((c) => <option key={c}>{c}</option>)}
+          </select>
+        )}
+
+        <div className="flex-1" />
+
+        {/* Custom date range */}
+        {period === 'custom' && (
+          <div className="flex items-center space-x-1.5 text-xs">
+            <input type="date" value={customFrom} max={customTo} onChange={(e) => setCustomFrom(e.target.value)} className="input-base py-1.5 text-xs" />
+            <span className="text-gray-400">to</span>
+            <input type="date" value={customTo} min={customFrom} max={isoDate(new Date())} onChange={(e) => setCustomTo(e.target.value)} className="input-base py-1.5 text-xs" />
+          </div>
+        )}
+
+        {/* Period tabs — right */}
+        <div className="flex border border-gray-200 overflow-hidden text-xs">
+          {(['today', 'week', 'month', 'custom'] as Period[]).map((t) => (
+            <button
+              key={t}
+              onClick={() => setPeriod(t)}
+              className={`px-3 py-2 font-bold capitalize transition-colors ${t === period ? 'bg-brand text-white' : 'text-gray-500 hover:bg-gray-50'}`}
+            >
+              {t === 'custom' ? <CalendarRange className="w-3.5 h-3.5 inline -mt-0.5" /> : t}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {loading ? (
         <div className="flex items-center justify-center h-48">
@@ -183,12 +112,14 @@ export function StaffReport() {
         </div>
       ) : (
         <>
-          <div className="grid sm:grid-cols-3 gap-3 mb-5">
+          {/* KPI strip — 2 per row always */}
+          <div className="grid grid-cols-2 gap-3 mb-5">
             <StatCard label="Active Cashiers"    value={String(staff.length)} icon={Users}      iconColor="blue"    />
             <StatCard label="Total Transactions" value={String(totalTxns)}   icon={ShoppingBag} iconColor="violet"  />
+            <StatCard label="Total Revenue"      value={fmt(totalRevenue)}   icon={TrendingUp}  iconColor="emerald" />
             <StatCard
               label="Best Performer"
-              value={best?.name ?? '—'}
+              value={best?.name?.split(' ')[0] ?? '—'}
               subLabel={best ? fmt(best.revenue) : ''}
               icon={TrendingUp}
               iconColor="orange"

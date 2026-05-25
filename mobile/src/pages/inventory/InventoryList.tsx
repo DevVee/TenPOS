@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect } from 'react'
-import { Search, Plus, Download, Loader2, Package, AlertTriangle, Layers } from 'lucide-react'
+import { Search, Plus, Loader2, Package, AlertTriangle, Layers } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Badge } from '../../components/ui/Badge'
 import { PageHeader } from '../../components/ui/PageHeader'
@@ -8,8 +8,6 @@ import { apiGetInventory } from '../../lib/api'
 import { useApiData } from '../../hooks/useApiData'
 import { onSyncEvent } from '../../lib/sync'
 import { useAuthStore } from '../../store/authStore'
-import { downloadXLSX } from '../../lib/xlsxExport'
-
 function fmt(n: number) { return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2 })}` }
 
 interface InventoryItem {
@@ -32,7 +30,7 @@ function StockBar({ stock, reorder }: { stock: number; reorder: number }) {
   const isLow = stock <= reorder && !isCritical
   const color = isCritical ? 'bg-red-500' : isLow ? 'bg-amber-400' : 'bg-emerald-500'
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center space-x-2">
       <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
         <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
       </div>
@@ -80,51 +78,18 @@ export function InventoryList() {
   const lowStockCount = products.filter((p) => Number(p.stock) <= Number(p.reorder_point) && Number(p.stock) > 0).length
   const outOfStock    = products.filter((p) => Number(p.stock) === 0).length
 
-  const handleExport = () => {
-    downloadXLSX(
-      `TenPOS-Inventory-${new Date().toISOString().slice(0, 10)}`,
-      [{
-        name: 'Inventory',
-        columns: [
-          { header: 'Product',       width: 32 },
-          { header: 'SKU',           width: 16 },
-          { header: 'Category',      width: 20 },
-          { header: 'Cost',          type: 'money',  width: 14 },
-          { header: 'Price',         type: 'money',  width: 14 },
-          { header: 'Stock',         type: 'number', width: 10 },
-          { header: 'Reorder Point', type: 'number', width: 14 },
-          { header: 'Status',        width: 12 },
-        ],
-        rows: filtered.map((p) => [
-          p.product_name, p.sku, p.category_name,
-          Number(p.cost), Number(p.price),
-          Number(p.stock), Number(p.reorder_point),
-          p.active ? 'Active' : 'Inactive',
-        ]),
-        totalsRow: [
-          `${filtered.length} products`, '', '',
-          filtered.reduce((s, p) => s + Number(p.cost) * Number(p.stock), 0),
-          '', filtered.reduce((s, p) => s + Number(p.stock), 0), '', '',
-        ],
-      }],
-      'Inventory Report'
-    )
-  }
-
   return (
     <div>
       <PageHeader
         title="Inventory"
         subtitle={loading ? 'Loading…' : `${products.length} products · Stock value ${fmt(stockValue)}`}
         actions={
-          <div className="flex gap-2">
-            <button onClick={handleExport} className="btn-secondary">
-              <Download className="w-3.5 h-3.5" /> Export
-            </button>
-            <button onClick={() => navigate('/inventory/add')} className="btn-primary">
-              <Plus className="w-3.5 h-3.5" /> Add Product
-            </button>
-          </div>
+          <button
+            onClick={() => navigate('/inventory/add')}
+            className="btn-primary flex items-center space-x-1.5"
+          >
+            <Plus className="w-3.5 h-3.5" /><span>Add Product</span>
+          </button>
         }
       />
 
@@ -136,7 +101,7 @@ export function InventoryList() {
       {/* KPI strip */}
       <div className="grid grid-cols-3 gap-2.5 sm:gap-3 md:gap-4 mb-4 md:mb-5">
         <div className="card p-3 sm:p-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:gap-4">
             <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0 mb-2 sm:mb-0">
               <Package className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-500" />
             </div>
@@ -147,7 +112,7 @@ export function InventoryList() {
           </div>
         </div>
         <div className="card p-3 sm:p-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:gap-4">
             <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-amber-50 flex items-center justify-center flex-shrink-0 mb-2 sm:mb-0">
               <AlertTriangle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-500" />
             </div>
@@ -158,7 +123,7 @@ export function InventoryList() {
           </div>
         </div>
         <div className="card p-3 sm:p-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:gap-4">
             <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0 mb-2 sm:mb-0">
               <Layers className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-500" />
             </div>
@@ -173,7 +138,7 @@ export function InventoryList() {
       </div>
 
       {/* Filter bar */}
-      <div className="flex flex-col gap-2.5 mb-4">
+      <div className="mb-4">
         {/* Search */}
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
@@ -185,46 +150,52 @@ export function InventoryList() {
           />
         </div>
 
-        {/* Category pills — horizontal scroll on mobile */}
-        <div className="flex gap-1.5 overflow-x-auto pb-0.5" style={{ scrollbarWidth: 'none' }}>
-          {categories.map((c) => (
-            <button
-              key={c}
-              onClick={() => setCategory(c)}
-              className={`flex-shrink-0 h-9 px-3 rounded-lg text-xs font-medium transition-colors ${
-                category === c
-                  ? 'bg-brand text-white'
-                  : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
-              }`}
-            >
-              {c}
-            </button>
-          ))}
-          {/* Stock filter — inline after category pills */}
-          <div className="w-px bg-gray-200 flex-shrink-0 mx-1" />
-          {([['all', 'All Stock'], ['low', 'Low Stock'], ['out', 'Out of Stock']] as const).map(([v, label]) => (
-            <button
-              key={v}
-              onClick={() => setStockFilter(v)}
-              className={`flex-shrink-0 h-9 px-3 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
-                stockFilter === v
-                  ? 'bg-gray-800 text-white'
-                  : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
-              }`}
-            >
-              {label}
-              {v === 'low' && lowStockCount > 0 && (
-                <span className="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-amber-400 text-white text-[9px] font-bold">
-                  {lowStockCount}
-                </span>
-              )}
-              {v === 'out' && outOfStock > 0 && (
-                <span className="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-bold">
-                  {outOfStock}
-                </span>
-              )}
-            </button>
-          ))}
+        {/* Single row: category pills (scrollable, left) + stock filters (pinned right) */}
+        <div className="flex items-center mt-3" style={{ gap: '8px' }}>
+          <div className="flex-1 overflow-x-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+            <div className="flex" style={{ gap: '6px' }}>
+              {categories.map((c) => (
+                <button
+                  key={c}
+                  onClick={() => setCategory(c)}
+                  className={`flex-shrink-0 h-9 px-3 text-xs font-medium transition-colors whitespace-nowrap border ${
+                    category === c
+                      ? 'bg-brand text-white border-brand'
+                      : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Stock filter — pinned to the right */}
+          <div className="flex flex-shrink-0" style={{ gap: '6px' }}>
+            {([['all', 'All Stock'], ['low', 'Low Stock'], ['out', 'Out of Stock']] as const).map(([v, label]) => (
+              <button
+                key={v}
+                onClick={() => setStockFilter(v)}
+                className={`flex-shrink-0 h-9 px-3 text-xs font-medium transition-colors whitespace-nowrap border ${
+                  stockFilter === v
+                    ? 'bg-gray-800 text-white border-gray-800'
+                    : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                <span>{label}</span>
+                {v === 'low' && lowStockCount > 0 && (
+                  <span className="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-amber-400 text-white text-[9px] font-bold">
+                    {lowStockCount}
+                  </span>
+                )}
+                {v === 'out' && outOfStock > 0 && (
+                  <span className="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-bold">
+                    {outOfStock}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

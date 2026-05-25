@@ -10,7 +10,7 @@
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 import { supabase, SESSION_KEY } from './supabase'
-import { db } from './db'
+import { db, createPinHash, setManagerPinHash } from './db'
 import { submitTransaction as syncSubmitTransaction, refreshProductCache, refreshInventoryCache } from './sync'
 import { v4 as uuid } from 'uuid'
 
@@ -351,15 +351,26 @@ export async function apiCreateProduct(data: Record<string, unknown>) {
   const { data: product, error } = await supabase
     .from('products')
     .insert({
-      branch_id:   cached?.branch_id,
-      category_id: (data.category_id as string | null) ?? null,
-      name:        data.name as string,
-      sku:         data.sku as string,
-      barcode:     (data.barcode as string | undefined) || null,
-      price:       Number(data.price),
-      cost:        Number(data.cost ?? 0),
-      image_url:   (data.image_url as string | undefined) || null,
-      active:      data.active !== false,
+      branch_id:    cached?.branch_id,
+      category_id:  (data.category_id  as string | null) ?? null,
+      name:         data.name          as string,
+      sku:          data.sku           as string,
+      barcode:      (data.barcode      as string | undefined) || null,
+      price:        Number(data.price),
+      cost:         Number(data.cost ?? 0),
+      image_url:    (data.image_url    as string | undefined) || null,
+      active:       data.active !== false,
+      // Extended fields
+      description:  (data.description  as string | undefined) || null,
+      brand:        (data.brand        as string | undefined) || null,
+      material:     (data.material     as string | undefined) || null,
+      color:        (data.color        as string | undefined) || null,
+      weight_grams: data.weight_grams  ? Number(data.weight_grams) : null,
+      length_cm:    data.length_cm     ? Number(data.length_cm)    : null,
+      width_cm:     data.width_cm      ? Number(data.width_cm)     : null,
+      height_cm:    data.height_cm     ? Number(data.height_cm)    : null,
+      tags:         (data.tags         as string[] | undefined)    ?? null,
+      notes:        (data.notes        as string | undefined)      || null,
     })
     .select('id, name, branch_id')
     .single()
@@ -375,28 +386,72 @@ export async function apiCreateProduct(data: Record<string, unknown>) {
     reorder_point: Number(data.reorder_point ?? 5),
   })
 
-  // Refresh product cache to include new product
-  await Promise.all([refreshProductCache(), refreshInventoryCache(cached?.branch_id ?? undefined)])
+  // Variants
+  const variants = data.variants as { label: string; value: string; price_adjustment: number }[] | undefined
+  if (variants?.length) {
+    await supabase.from('product_variants').insert(
+      variants.map((v) => ({
+        product_id:       p.id,
+        label:            v.label,
+        value:            v.value,
+        price_adjustment: Number(v.price_adjustment ?? 0),
+      })),
+    )
+  }
 
+  await Promise.all([refreshProductCache(), refreshInventoryCache(cached?.branch_id ?? undefined)])
   return apiGetProduct(p.id)
 }
 
 export async function apiUpdateProduct(id: string, data: Record<string, unknown>) {
   await _requireOnline()
   const col: Record<string, unknown> = {}
-  const fields = ['name', 'sku', 'barcode', 'category_id', 'price', 'cost', 'image_url', 'active'] as const
-  for (const f of fields) if (data[f] !== undefined) col[f] = f === 'price' || f === 'cost' ? Number(data[f]) : data[f]
+  // Core fields
+  if (data.name        !== undefined) col.name        = data.name
+  if (data.sku         !== undefined) col.sku         = data.sku
+  if (data.barcode     !== undefined) col.barcode     = (data.barcode as string) || null
+  if (data.category_id !== undefined) col.category_id = data.category_id
+  if (data.price       !== undefined) col.price       = Number(data.price)
+  if (data.cost        !== undefined) col.cost        = Number(data.cost)
+  if (data.image_url   !== undefined) col.image_url   = data.image_url
+  if (data.active      !== undefined) col.active      = data.active
+  // Extended fields
+  if (data.description  !== undefined) col.description  = (data.description  as string) || null
+  if (data.brand        !== undefined) col.brand        = (data.brand        as string) || null
+  if (data.material     !== undefined) col.material     = (data.material     as string) || null
+  if (data.color        !== undefined) col.color        = (data.color        as string) || null
+  if (data.weight_grams !== undefined) col.weight_grams = data.weight_grams ? Number(data.weight_grams) : null
+  if (data.length_cm    !== undefined) col.length_cm    = data.length_cm    ? Number(data.length_cm)    : null
+  if (data.width_cm     !== undefined) col.width_cm     = data.width_cm     ? Number(data.width_cm)     : null
+  if (data.height_cm    !== undefined) col.height_cm    = data.height_cm    ? Number(data.height_cm)    : null
+  if (data.tags         !== undefined) col.tags         = data.tags         ?? null
+  if (data.notes        !== undefined) col.notes        = (data.notes       as string) || null
 
   if (Object.keys(col).length) {
     const { error } = await supabase.from('products').update(col).eq('id', id)
     if (error) throw new Error(error.message)
   }
 
+  // Stock
   const stockCol: Record<string, number> = {}
   if (data.reorder_point !== undefined) stockCol.reorder_point = Number(data.reorder_point)
   if (data.stock         !== undefined) stockCol.stock         = Number(data.stock)
   if (Object.keys(stockCol).length) {
     await supabase.from('stock_levels').update(stockCol).eq('product_id', id)
+  }
+
+  // Variants — full replace
+  const variants = data.variants as { label: string; value: string; price_adjustment: number }[] | undefined
+  if (variants !== undefined) {
+    await supabase.from('product_variants').delete().eq('product_id', id)
+    if (variants.length > 0) {
+      await supabase.from('product_variants').insert(
+        variants.map((v) => ({
+          product_id: id, label: v.label, value: v.value,
+          price_adjustment: Number(v.price_adjustment ?? 0),
+        })),
+      )
+    }
   }
 
   await Promise.all([refreshProductCache(), refreshInventoryCache()])
@@ -626,8 +681,21 @@ export async function apiVoidWithPin(id: string, reason: string, pin: string) {
 
 export async function apiSetOverridePin(pin: string) {
   await _requireOnline()
-  const { error } = await supabase.rpc('set_override_pin', { p_pin: pin })
+  // Hash client-side (PBKDF2 salt:hash) so the DB stores a format we can
+  // fetch back and verify offline — server never sees the raw PIN.
+  const pinHash = await createPinHash(pin)
+  const { error } = await supabase.rpc('set_override_pin', { p_hash: pinHash })
   if (error) throw new Error(error.message)
+  // Cache immediately so it works right away without needing a page reload
+  setManagerPinHash(pinHash)
+}
+
+/** Fetch the manager PIN hash from the DB and cache it locally for offline use. */
+export async function apiLoadManagerPin(): Promise<void> {
+  try {
+    const { data } = await supabase.rpc('get_manager_pin_hash')
+    if (data) setManagerPinHash(data as string)
+  } catch { /* offline or RPC not yet created — use cached value */ }
 }
 
 export async function apiClearOverridePin() {
@@ -675,9 +743,41 @@ export async function apiReturnTransaction(
   })
   if (error) throw new Error(error.message)
 
-  await supabase.from('transactions').update({ status: 'returned' }).eq('id', id)
-  await db.transactions.update(id, { status: 'returned' })
+  await supabase.from('transactions').update({ status: 'refunded' }).eq('id', id)
+  await db.transactions.update(id, { status: 'returned' }) // Dexie uses 'returned'; DB uses 'refunded'
   return { ok: true }
+}
+
+
+/**
+ * Process a return using the manager PIN.
+ * Tries the `return_with_pin` Postgres RPC first (SECURITY DEFINER — bypasses RLS).
+ * Falls back to the direct-insert path for users who already have INSERT permission.
+ */
+export async function apiReturnWithPin(
+  id: string,
+  items: { item_id: string; quantity: number; reason?: string }[],
+  pin: string,
+): Promise<{ ok: boolean }> {
+  await _requireOnline()
+
+  // Try the RPC path first — runs with SECURITY DEFINER so RLS is bypassed
+  const { error: rpcErr } = await supabase.rpc('return_with_pin', {
+    p_transaction_id: id,
+    p_pin:            pin,
+  })
+
+  if (!rpcErr) {
+    await db.transactions.update(id, { status: 'returned' })
+    return { ok: true }
+  }
+
+  // 42883 = "function does not exist" — fall back to direct INSERT for managers
+  if (rpcErr.code === '42883' || (rpcErr.message ?? '').includes('does not exist')) {
+    return apiReturnTransaction(id, items)
+  }
+
+  throw new Error(rpcErr.message)
 }
 
 // â”€â”€â”€ Vouchers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1221,7 +1321,7 @@ export async function apiGetAuditLog(params?: Record<string, string>) {
 interface LocalAdjustment {
   id: string; product_id: string; product_name: string
   type: 'in' | 'out' | 'correction' | 'damage' | 'return'
-  quantity: number; reason: string; by: string; branch_id: string; created_at: string
+  quantity: number; reason: string; by: string; branch_id: string; branch_name?: string | null; created_at: string
 }
 
 const ADJ_KEY = 'tenpos_mobile_adjustments'
@@ -1232,7 +1332,7 @@ export async function apiGetAdjustments(params?: Record<string, string>) {
     try {
       let query = supabase
         .from('stock_adjustments')
-        .select('id, product_id, type, quantity, reason, branch_id, created_at, products(name), staff(name)')
+        .select('id, product_id, type, quantity, reason, branch_id, created_at, products(name), staff(name), branches(name)')
         .order('created_at', { ascending: false })
         .limit(200)
 
@@ -1250,6 +1350,7 @@ export async function apiGetAdjustments(params?: Record<string, string>) {
           reason:       (r.reason      as string) ?? '',
           by:           ((r.staff as { name: string } | null)?.name) ?? 'System',
           branch_id:    r.branch_id    as string,
+          branch_name:  ((r.branches as { name: string } | null)?.name) ?? null,
           created_at:   r.created_at   as string,
         }))
         // Persist to localStorage so offline fallback is fresh

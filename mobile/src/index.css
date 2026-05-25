@@ -16,7 +16,9 @@
   }
 
   body {
-    font-family: 'Inter', system-ui, sans-serif;
+    /* Inter CDN is unreachable inside Capacitor — use native system fonts.
+       Roboto (Android) and SF Pro (iOS/macOS) both support ₱ and look great. */
+    font-family: -apple-system, BlinkMacSystemFont, 'Roboto', 'Segoe UI', system-ui, sans-serif;
     background-color: #F5F7FA;
     color: #111827;
     line-height: 1.5;
@@ -32,7 +34,8 @@
 
   #root {
     width: 100%;
-    min-height: 100dvh;
+    min-height: 100vh;   /* Chrome 79 fallback */
+    min-height: 100dvh;  /* Chrome 108+ override */
   }
 
   ::-webkit-scrollbar               { width: 5px; height: 5px; }
@@ -63,14 +66,14 @@
   /* ── Buttons ─────────────────────────────────────────────────────────────── */
 
   .btn-primary {
-    @apply inline-flex items-center gap-2 px-4 py-2 h-10
+    @apply inline-flex items-center justify-center space-x-2 px-4 py-2 h-10
            text-white text-sm font-semibold
-           rounded-lg
            active:scale-[0.98] transition-all duration-150
            disabled:opacity-40 disabled:cursor-not-allowed
            select-none;
     background-color: #E5484D;
     border: 1px solid #E5484D;
+    border-radius: 0;
   }
   .btn-primary:hover:not(:disabled) {
     background-color: #C93B40;
@@ -78,14 +81,14 @@
   }
 
   .btn-primary-lg {
-    @apply inline-flex items-center gap-2 px-5 py-2.5 h-12
+    @apply inline-flex items-center justify-center space-x-2 px-5 py-2.5 h-12
            text-white text-sm font-semibold
-           rounded-lg
            active:scale-[0.98] transition-all duration-150
            disabled:opacity-40 disabled:cursor-not-allowed
            select-none;
     background-color: #E5484D;
     border: 1px solid #E5484D;
+    border-radius: 0;
   }
   .btn-primary-lg:hover:not(:disabled) {
     background-color: #C93B40;
@@ -93,45 +96,48 @@
   }
 
   .btn-secondary {
-    @apply inline-flex items-center gap-2 px-4 py-2 h-10
+    @apply inline-flex items-center justify-center space-x-2 px-4 py-2 h-10
            bg-white text-gray-700 text-sm font-medium
-           rounded-lg border border-gray-200
+           border border-gray-200
            hover:bg-gray-50 hover:border-gray-300
            active:scale-[0.98] transition-all duration-150
            disabled:opacity-40 disabled:cursor-not-allowed
            select-none;
+    border-radius: 0;
   }
 
   .btn-ghost {
-    @apply inline-flex items-center gap-2 px-3 py-2 h-10
+    @apply inline-flex items-center justify-center space-x-2 px-3 py-2 h-10
            bg-transparent text-gray-500 text-sm font-medium
-           rounded-lg
            hover:bg-gray-100 hover:text-gray-700
            active:scale-[0.98] transition-all duration-150
            disabled:opacity-40 disabled:cursor-not-allowed
            select-none;
     border: 1px solid transparent;
+    border-radius: 0;
   }
 
   .btn-danger {
-    @apply inline-flex items-center gap-2 px-4 py-2 h-10
+    @apply inline-flex items-center justify-center space-x-2 px-4 py-2 h-10
            bg-red-50 text-red-600 text-sm font-medium
-           rounded-lg border border-red-100
+           border border-red-100
            hover:bg-red-100 hover:border-red-200
            active:scale-[0.98] transition-all duration-150
            disabled:opacity-40 disabled:cursor-not-allowed
            select-none;
+    border-radius: 0;
   }
 
   .btn-sm {
-    @apply h-7 px-3 text-xs rounded-md;
+    @apply h-7 px-3 text-xs;
+    border-radius: 0;
   }
 
   /* ── Inputs ──────────────────────────────────────────────────────────────── */
 
   .input-base {
     @apply w-full h-10 px-3 text-sm text-gray-900 font-normal
-           bg-white border border-gray-200 rounded-lg
+           bg-white border border-gray-200 rounded-md
            placeholder:text-gray-400
            transition-all duration-150;
   }
@@ -143,7 +149,7 @@
 
   .input-base-lg {
     @apply w-full h-11 px-3.5 text-sm text-gray-900 font-normal
-           bg-white border border-gray-200 rounded-lg
+           bg-white border border-gray-200 rounded-md
            placeholder:text-gray-400
            transition-all duration-150;
   }
@@ -163,7 +169,7 @@
 
   .select-base {
     @apply w-full h-10 px-3 text-sm text-gray-900
-           bg-white border border-gray-200 rounded-lg
+           bg-white border border-gray-200 rounded-md
            transition-all duration-150 cursor-pointer;
   }
   .select-base:focus {
@@ -175,14 +181,14 @@
   /* ── Cards ───────────────────────────────────────────────────────────────── */
 
   .card {
-    @apply bg-white border border-gray-200 rounded-xl;
+    @apply bg-white border border-gray-200 rounded-lg;
     box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
     min-width: 0;
     overflow: hidden;
   }
 
   .card-elevated {
-    @apply bg-white border border-gray-200 rounded-xl;
+    @apply bg-white border border-gray-200 rounded-lg;
     box-shadow: 0 2px 6px 0 rgb(0 0 0 / 0.07);
     min-width: 0;
     overflow: hidden;
@@ -214,7 +220,7 @@
   /* ── Badges ──────────────────────────────────────────────────────────────── */
 
   .badge {
-    @apply inline-flex items-center gap-1 px-2 py-0.5
+    @apply inline-flex items-center space-x-1 px-2 py-0.5
            font-medium rounded-md leading-none whitespace-nowrap;
     font-size: 11px;
   }
@@ -230,7 +236,7 @@
   /* ── Sidebar navigation ──────────────────────────────────────────────────── */
 
   .sidebar-link {
-    @apply relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-normal
+    @apply relative flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-normal
            hover:text-white
            transition-all duration-150 cursor-pointer w-full select-none;
     color: #9CA3AF;

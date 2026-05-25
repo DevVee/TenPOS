@@ -110,7 +110,7 @@ export function StaffDetail() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-5">
+      <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <button onClick={() => navigate('/staff')} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500">
             <ArrowLeft className="w-5 h-5" />
@@ -142,7 +142,7 @@ export function StaffDetail() {
         </div>
       </div>
 
-      <div className="grid sm:grid-cols-2 gap-4 mb-4">
+      <div className="grid sm:grid-cols-2 gap-4 mb-5">
         <div className="card p-4">
           <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-3">Account Details</p>
           <div className="space-y-2.5">
@@ -189,13 +189,13 @@ export function StaffDetail() {
       </div>
 
       {/* Permissions */}
-      <div className="card p-4 mb-4">
+      <div className="card p-5 mb-4">
         <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-3">
           Permissions ({rb.label} Role)
         </p>
         <div className="grid sm:grid-cols-2 gap-2">
           {perms.map(([label, allowed]) => (
-            <div key={label} className="flex items-center gap-2 text-sm">
+            <div key={label} className="flex items-center space-x-2.5 text-sm">
               <span className={`w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 ${allowed ? 'bg-green-100' : 'bg-gray-100'}`}>
                 {allowed
                   ? <Check className="w-2.5 h-2.5 text-green-600" />

@@ -1,4 +1,3 @@
-import { X } from 'lucide-react'
 import { useEffect } from 'react'
 
 interface ModalProps {
@@ -54,9 +53,9 @@ export function Modal({ open, onClose, title, children, size = 'md', footer }: M
           <h3 className="text-base font-semibold text-gray-900 tracking-tight">{title}</h3>
           <button
             onClick={onClose}
-            className="w-7 h-7 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors flex items-center justify-center"
+            className="h-7 px-2.5 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors text-xs font-semibold"
           >
-            <X className="w-4 h-4" />
+            Close
           </button>
         </div>
 
@@ -67,7 +66,7 @@ export function Modal({ open, onClose, title, children, size = 'md', footer }: M
 
         {/* Optional footer */}
         {footer && (
-          <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-gray-100 flex-shrink-0 bg-gray-50 rounded-b-xl">
+          <div className="flex items-center justify-end space-x-2 px-5 py-4 border-t border-gray-100 flex-shrink-0 bg-gray-50 rounded-b-xl">
             {footer}
           </div>
         )}

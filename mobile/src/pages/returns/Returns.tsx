@@ -1,11 +1,12 @@
 ﻿import { useState, useCallback, useEffect } from 'react'
-import { Search, RotateCcw, XCircle, Loader2, AlertCircle } from 'lucide-react'
+import { Search, RotateCcw, XCircle, Loader2, AlertCircle, Lock } from 'lucide-react'
 import { Badge } from '../../components/ui/Badge'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { Modal } from '../../components/ui/Modal'
-import { apiGetTransactions, apiVoidTransaction, apiGetTransaction, apiReturnTransaction } from '../../lib/api'
+import { apiGetTransactions, apiVoidWithPin, apiGetTransaction, apiReturnWithPin } from '../../lib/api'
 import { supabase } from '../../lib/supabase'
 import { useApiData } from '../../hooks/useApiData'
+import { verifyManagerPin } from '../../lib/db'
 
 function fmt(n: number) { return `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2 })}` }
 
@@ -17,6 +18,8 @@ interface TxnItem { id: string; product_name: string; quantity: number; total: n
 interface TxnDetail extends Txn { items: TxnItem[] }
 
 export function Returns() {
+  const requiresPin = true // all returns/voids require manager device PIN
+
   const [search,      setSearch]      = useState('')
   const [voidModal,   setVoidModal]   = useState(false)
   const [returnModal, setReturnModal] = useState(false)
@@ -25,6 +28,7 @@ export function Returns() {
   // Void modal state
   const [voidReceipt,  setVoidReceipt]  = useState('')
   const [voidReason,   setVoidReason]   = useState('')
+  const [voidPin,      setVoidPin]      = useState('')
   const [voidTxn,      setVoidTxn]      = useState<Txn | null>(null)
   const [voidSearching, setVoidSearching] = useState(false)
   const [voidError,    setVoidError]    = useState('')
@@ -33,6 +37,7 @@ export function Returns() {
   // Return modal state
   const [retReceipt,   setRetReceipt]   = useState('')
   const [retTxn,       setRetTxn]       = useState<TxnDetail | null>(null)
+  const [retPin,       setRetPin]       = useState('')
   const [retSearching, setRetSearching] = useState(false)
   const [retError,     setRetError]     = useState('')
   const [retSaving,    setRetSaving]    = useState(false)
@@ -97,13 +102,18 @@ export function Returns() {
 
   const submitVoid = async () => {
     if (!voidTxn || !voidReason) return
+    if (requiresPin) {
+      const ok = await verifyManagerPin(voidPin)
+      if (!ok) { setVoidError('Incorrect manager PIN.'); return }
+    }
     setVoidSaving(true)
     setVoidError('')
     try {
-      await apiVoidTransaction(voidTxn.id, voidReason)
+      await apiVoidWithPin(voidTxn.id, voidReason, voidPin)
       setVoidModal(false)
       setVoidReceipt('')
       setVoidReason('')
+      setVoidPin('')
       setVoidTxn(null)
       setTick((t) => t + 1)
     } catch (err) {
@@ -135,15 +145,21 @@ export function Returns() {
 
   const submitReturn = async () => {
     if (!retTxn) return
+    if (requiresPin) {
+      const ok = await verifyDevicePin(retPin)
+      if (!ok) { setRetError('Incorrect manager PIN.'); return }
+    }
     setRetSaving(true)
     setRetError('')
     try {
-      await apiReturnTransaction(
+      await apiReturnWithPin(
         retTxn.id,
-        retTxn.items.map((item) => ({ item_id: item.id, quantity: item.quantity }))
+        retTxn.items.map((item) => ({ item_id: item.id, quantity: item.quantity })),
+        retPin,
       )
       setReturnModal(false)
       setRetReceipt('')
+      setRetPin('')
       setRetTxn(null)
       setTick((t) => t + 1)
     } catch (err) {
@@ -157,6 +173,7 @@ export function Returns() {
     setVoidModal(false)
     setVoidReceipt('')
     setVoidReason('')
+    setVoidPin('')
     setVoidTxn(null)
     setVoidError('')
   }
@@ -164,6 +181,7 @@ export function Returns() {
   const closeReturnModal = () => {
     setReturnModal(false)
     setRetReceipt('')
+    setRetPin('')
     setRetTxn(null)
     setRetError('')
   }
@@ -174,12 +192,12 @@ export function Returns() {
         title="Returns & Voids"
         subtitle="Manager-approved returns and voided transactions"
         actions={
-          <div className="flex gap-2">
-            <button onClick={() => setReturnModal(true)} className="btn-secondary flex items-center gap-1.5">
-              <RotateCcw className="w-4 h-4" /> Process Return
+          <div className="flex" style={{ gap: '8px' }}>
+            <button onClick={() => setReturnModal(true)} className="btn-secondary">
+              <RotateCcw className="w-4 h-4" /><span>Process Return</span>
             </button>
-            <button onClick={() => setVoidModal(true)} className="btn-secondary flex items-center gap-1.5 text-red-600 border-red-200 hover:bg-red-50">
-              <XCircle className="w-4 h-4" /> Void Transaction
+            <button onClick={() => setVoidModal(true)} className="btn-secondary text-red-600 border-red-200 hover:bg-red-50">
+              <XCircle className="w-4 h-4" /><span>Void Transaction</span>
             </button>
           </div>
         }
@@ -281,18 +299,37 @@ export function Returns() {
             </select>
           </div>
 
+          {requiresPin && (
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                <span className="flex items-center" style={{ gap: '4px' }}>
+                  <Lock className="w-3 h-3 text-gray-500" /> Manager PIN required
+                </span>
+              </label>
+              <input
+                type="password"
+                inputMode="numeric"
+                className="input-base font-mono tracking-widest"
+                placeholder="Enter manager PIN"
+                maxLength={8}
+                value={voidPin}
+                onChange={(e) => setVoidPin(e.target.value.replace(/\D/g, ''))}
+              />
+            </div>
+          )}
+
           {voidError && (
-            <div className="flex items-center gap-2 text-sm text-red-600">
+            <div className="flex items-center text-sm text-red-600" style={{ gap: '8px' }}>
               <AlertCircle className="w-4 h-4" /> {voidError}
             </div>
           )}
 
-          <div className="flex gap-2 pt-2">
+          <div className="flex pt-2" style={{ gap: '8px' }}>
             <button onClick={closeVoidModal} className="btn-secondary flex-1">Cancel</button>
             <button
               onClick={submitVoid}
-              disabled={!voidTxn || !voidReason || voidSaving}
-              className="flex-1 bg-red-500 text-white px-4 py-2 rounded-lg font-medium text-sm hover:bg-red-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              disabled={!voidTxn || !voidReason || voidSaving || (requiresPin && !voidPin)}
+              className="flex-1 bg-red-500 text-white px-4 py-2 rounded-md font-medium text-sm hover:bg-red-600 transition-colors disabled:opacity-50 flex items-center justify-center" style={{ gap: '8px' }}
             >
               {voidSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               Void Transaction
@@ -343,21 +380,40 @@ export function Returns() {
             </div>
           )}
 
+          {requiresPin && (
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                <span className="flex items-center" style={{ gap: '4px' }}>
+                  <Lock className="w-3 h-3 text-gray-500" /> Manager PIN required
+                </span>
+              </label>
+              <input
+                type="password"
+                inputMode="numeric"
+                className="input-base font-mono tracking-widest"
+                placeholder="Enter manager PIN"
+                maxLength={8}
+                value={retPin}
+                onChange={(e) => setRetPin(e.target.value.replace(/\D/g, ''))}
+              />
+            </div>
+          )}
+
           {retError && (
-            <div className="flex items-center gap-2 text-sm text-red-600">
+            <div className="flex items-center text-sm text-red-600" style={{ gap: '8px' }}>
               <AlertCircle className="w-4 h-4" /> {retError}
             </div>
           )}
 
-          <div className="flex gap-2 pt-2">
+          <div className="flex pt-2" style={{ gap: '8px' }}>
             <button onClick={closeReturnModal} className="btn-secondary flex-1">Cancel</button>
             <button
               onClick={submitReturn}
-              disabled={!retTxn || retSaving}
-              className="btn-primary flex-1 disabled:opacity-50 flex items-center justify-center gap-2"
+              disabled={!retTxn || retSaving || (requiresPin && !retPin)}
+              className="btn-primary flex-1 disabled:opacity-50"
             >
               {retSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              Process Full Return
+              <span>Process Full Return</span>
             </button>
           </div>
         </div>

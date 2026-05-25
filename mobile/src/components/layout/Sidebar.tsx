@@ -2,7 +2,7 @@ import { Link, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, ShoppingCart, Package, BarChart3,
   Users, Settings2, ClipboardList, ArrowLeftRight,
-  Shield, LogOut, ChevronDown, ChevronRight, Printer, AlertTriangle,
+  Shield, LogOut, ChevronDown, ChevronRight, Printer, AlertTriangle, RefreshCw,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useAuthStore } from '../../store/authStore'
@@ -25,10 +25,11 @@ const NAV: NavItem[] = [
   // Cashier-only shortcuts (admin/manager access these via Settings & Inventory sub-menus)
   { label: 'Low Stock',      to: '/inventory/low-stock', icon: AlertTriangle, roles: ['cashier'],                         section: 'GENERAL' },
   { label: 'Printer Setup',  to: '/settings/printer',    icon: Printer,       roles: ['cashier'],                         section: 'GENERAL' },
+  { label: 'Sync Log',       to: '/settings/sync-log',   icon: RefreshCw,     roles: ['cashier'],                         section: 'GENERAL' },
 
   // OPERATIONS
-  { label: 'Transactions',   to: '/transactions', icon: ClipboardList,   roles: ['admin', 'manager', 'viewer'],            section: 'OPERATIONS' },
-  { label: 'Returns',        to: '/returns',      icon: ArrowLeftRight,  roles: ['admin', 'manager'],                      section: 'OPERATIONS' },
+  { label: 'Transactions',   to: '/transactions', icon: ClipboardList,   roles: ['admin', 'manager', 'viewer', 'cashier'], section: 'OPERATIONS' },
+  { label: 'Returns',        to: '/returns',      icon: ArrowLeftRight,  roles: ['admin', 'manager', 'cashier'],           section: 'OPERATIONS' },
   {
     label: 'Inventory', to: '/inventory', icon: Package, roles: ['admin', 'manager'], section: 'OPERATIONS',
     children: [
@@ -68,7 +69,12 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
   const { pathname } = useLocation()
   const { trigger: triggerLogout, modal: logoutModal } = useLogoutConfirm()
 
-  const [openMenus, setOpenMenus] = useState<string[]>(['Inventory', 'Reports', 'Settings'])
+  // Only auto-open the menu group that contains the current route
+  const [openMenus, setOpenMenus] = useState<string[]>(() =>
+    NAV
+      .filter((n) => n.children?.some((c) => pathname === c.to || pathname.startsWith(c.to + '/')))
+      .map((n) => n.label)
+  )
 
   const visible = NAV.filter((n) => user && n.roles.includes(user.role))
 
@@ -100,7 +106,7 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
 
       {/* ── Logo ──────────────────────────────────────────────────────────── */}
       <div
-        className={`flex items-center h-14 flex-shrink-0 border-b ${collapsed ? 'justify-center px-0' : 'px-4 gap-3'}`}
+        className={`flex items-center h-14 flex-shrink-0 border-b ${collapsed ? 'justify-center px-0' : 'px-4 space-x-3'}`}
         style={{ borderColor: 'rgba(255,255,255,0.06)' }}
       >
         <div className={`flex-shrink-0 rounded-lg overflow-hidden ${collapsed ? 'w-8 h-8' : 'w-7 h-7'}`}>
@@ -183,7 +189,7 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
                                 <Link
                                   key={child.to}
                                   to={child.to}
-                                  className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-all duration-100
+                                  className={`flex items-center space-x-2 px-2 py-1.5 rounded-md text-sm transition-all duration-100
                                     ${childActive
                                       ? 'text-white font-medium'
                                       : 'font-normal hover:text-white'
@@ -232,7 +238,7 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
           <Link
             to="/profile"
             title={collapsed ? `${user.name} — Profile` : undefined}
-            className={`flex items-center gap-3 px-3 py-3 transition-all duration-150 hover:bg-white/[0.05]
+            className={`flex items-center space-x-3 px-3 py-3 transition-all duration-150 hover:bg-white/[0.05]
               ${collapsed ? 'justify-center' : ''}`}
           >
             {/* Avatar */}
@@ -257,7 +263,7 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
         <button
           onClick={triggerLogout}
           title={collapsed ? 'Sign out' : undefined}
-          className={`flex items-center gap-3 w-full px-3 py-2.5 text-sm transition-all duration-150
+          className={`flex items-center space-x-3 w-full px-3 py-2.5 text-sm transition-all duration-150
             hover:bg-red-500/10 group ${collapsed ? 'justify-center' : ''}`}
           style={{ color: '#6B7280' }}
         >

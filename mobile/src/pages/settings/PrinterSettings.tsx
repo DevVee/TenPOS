@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
 import {
   Bluetooth, BluetoothOff, Printer, RefreshCw,
-  CheckCircle2, AlertCircle, Loader2, X, ChevronLeft,
+  CheckCircle2, AlertCircle, Loader2, X,
 } from 'lucide-react'
+import { PageHeader } from '../../components/ui/PageHeader'
 import { usePrinterStore } from '../../store/printerStore'
 import { scanDevices, connectDevice, disconnectDevice, testPrint, checkConnection } from '../../lib/bluetoothPrint'
 import type { BTDevice } from '../../store/printerStore'
@@ -27,7 +27,6 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
 }
 
 export function PrinterSettings() {
-  const navigate = useNavigate()
   const printer = usePrinterStore()
 
   const [devices,       setDevices]       = useState<BTDevice[]>([])
@@ -126,26 +125,16 @@ export function PrinterSettings() {
   }[printer.status]
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div>
+      <PageHeader
+        title="Printer Settings"
+        subtitle="Bluetooth thermal receipt printer"
+      />
 
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-3 flex items-center gap-3">
-        <button
-          onClick={() => navigate(-1)}
-          className="w-9 h-9 rounded-xl flex items-center justify-center hover:bg-gray-100 transition-colors flex-shrink-0"
-        >
-          <ChevronLeft className="w-5 h-5 text-gray-700" />
-        </button>
-        <div>
-          <h1 className="text-base font-bold text-gray-900 leading-tight">Printer Settings</h1>
-          <p className="text-xs text-gray-400">Bluetooth thermal receipt printer</p>
-        </div>
-      </div>
-
-      <div className="p-4 space-y-4 max-w-lg mx-auto">
+      <div className="space-y-4">
 
         {/* ── Connected printer card ──────────────────────────────────────── */}
-        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-100">
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Current Printer</p>
           </div>
@@ -190,22 +179,22 @@ export function PrinterSettings() {
                   </p>
                 )}
 
-                <div className="flex gap-2 mt-3">
+                <div className="flex gap-2 mt-4">
                   <button
                     onClick={handleTest}
                     disabled={testBusy}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 transition-colors text-sm font-medium text-gray-700 disabled:opacity-50"
+                    className="btn-secondary flex-1 flex items-center justify-center space-x-2 h-11 text-sm"
                   >
                     {testBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
-                    Test Print
+                    <span>Test Print</span>
                   </button>
                   <button
                     onClick={handleDisconnect}
                     disabled={disconnecting}
-                    className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 transition-colors text-sm font-medium text-red-600 disabled:opacity-50"
+                    className="btn-danger flex items-center space-x-2 h-11 px-5"
                   >
                     {disconnecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
-                    Forget
+                    <span>Forget Printer</span>
                   </button>
                 </div>
               </div>
@@ -224,13 +213,13 @@ export function PrinterSettings() {
         </div>
 
         {/* ── Search ─────────────────────────────────────────────────────── */}
-        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Paired Bluetooth Devices</p>
             <button
               onClick={handleScan}
               disabled={scanning}
-              className="flex items-center gap-1.5 text-xs font-semibold text-brand disabled:opacity-50"
+              className="btn-primary flex items-center space-x-1.5 h-8 px-4 text-xs disabled:opacity-50"
             >
               {scanning
                 ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Searching…</>
@@ -293,14 +282,14 @@ export function PrinterSettings() {
                       <button
                         onClick={() => handleConnect(device)}
                         disabled={!!connectingTo}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 flex items-center gap-1 ${
+                        className={`h-9 px-4 text-xs font-semibold transition-colors disabled:opacity-50 flex items-center gap-1.5 ${
                           isSaved
-                            ? 'bg-emerald-100 text-emerald-700'
-                            : 'bg-brand text-white hover:bg-brand/90'
+                            ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                            : 'btn-primary'
                         }`}
                       >
                         {isThis
-                          ? <><Loader2 className="w-3 h-3 animate-spin" />Connecting</>
+                          ? <><Loader2 className="w-3 h-3 animate-spin" />Connecting…</>
                           : isSaved
                           ? <><CheckCircle2 className="w-3 h-3" />Connected</>
                           : 'Connect'
@@ -315,7 +304,7 @@ export function PrinterSettings() {
         </div>
 
         {/* ── Settings ───────────────────────────────────────────────────── */}
-        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-100">
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Options</p>
           </div>
@@ -349,7 +338,7 @@ export function PrinterSettings() {
         </div>
 
         {/* ── Help note ──────────────────────────────────────────────────── */}
-        <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 flex items-start gap-3">
+        <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 flex items-start gap-3">
           <Bluetooth className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
           <div className="text-xs text-blue-600 space-y-1">
             <p className="font-semibold">How to connect your printer</p>
@@ -364,3 +353,4 @@ export function PrinterSettings() {
     </div>
   )
 }
+

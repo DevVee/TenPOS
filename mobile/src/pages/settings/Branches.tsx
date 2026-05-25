@@ -245,20 +245,20 @@ export function Branches() {
                     </div>
                   </div>
                   {isAdmin && (
-                    <div className="flex items-center gap-1 ml-2 flex-shrink-0">
+                    <div className="flex items-center gap-1.5 ml-2 flex-shrink-0">
                       <button
                         onClick={() => openEdit(b)}
-                        className="w-8 h-8 rounded-lg border border-gray-200 hover:bg-gray-50 hover:border-brand/30 text-gray-500 hover:text-brand transition-colors flex items-center justify-center"
+                        className="flex items-center gap-1 h-8 px-3 border border-gray-200 bg-white hover:bg-gray-50 hover:border-brand hover:text-brand text-gray-600 text-xs font-medium transition-colors"
                         title="Edit branch"
                       >
-                        <Edit className="w-3.5 h-3.5" />
+                        <Edit className="w-3.5 h-3.5" /> Edit
                       </button>
                       <button
                         onClick={() => openDelete(b)}
-                        className="w-8 h-8 rounded-lg border border-gray-200 hover:bg-red-50 hover:border-red-200 text-gray-400 hover:text-red-500 transition-colors flex items-center justify-center"
+                        className="flex items-center gap-1 h-8 px-3 border border-red-200 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-medium transition-colors"
                         title="Delete branch"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Trash2 className="w-3.5 h-3.5" /> Delete
                       </button>
                     </div>
                   )}
@@ -266,11 +266,11 @@ export function Branches() {
 
                 {/* Info rows */}
                 <div className="space-y-2">
-                  <div className="flex items-start gap-2 text-sm">
+                  <div className="flex items-start space-x-2 text-sm">
                     <MapPin className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />
                     <span className="text-gray-600 line-clamp-2">{b.address || '—'}</span>
                   </div>
-                  <div className="flex items-center gap-2 text-sm">
+                  <div className="flex items-center space-x-2 text-sm">
                     <Monitor className="w-4 h-4 text-gray-400 flex-shrink-0" />
                     <span className="text-gray-600">
                       {b.terminalCount ?? 0} POS Terminal{(b.terminalCount ?? 0) !== 1 ? 's' : ''}
@@ -289,7 +289,7 @@ export function Branches() {
                     {isAdmin && (
                       <button
                         onClick={() => toggleActive(b)}
-                        className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-colors ${
+                        className={`flex items-center space-x-1 text-xs font-semibold px-2.5 py-1.5 border transition-colors ${
                           b.active
                             ? 'border-emerald-200 text-emerald-600 hover:bg-emerald-50'
                             : 'border-gray-200 text-gray-400 hover:bg-gray-50'
@@ -300,7 +300,7 @@ export function Branches() {
                           ? <ToggleRight className="w-3.5 h-3.5" />
                           : <ToggleLeft  className="w-3.5 h-3.5" />
                         }
-                        {b.active ? 'Active' : 'Inactive'}
+                        <span>{b.active ? 'Active' : 'Inactive'}</span>
                       </button>
                     )}
                     {/* Set as viewing branch (admin only) */}
@@ -311,7 +311,7 @@ export function Branches() {
                             ? setActiveBranch(null, null)
                             : setActiveBranch(b.id, b.name, b.address || null)
                         }
-                        className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-colors ${
+                        className={`text-xs font-semibold px-2.5 py-1.5 border transition-colors ${
                           isActiveBranch
                             ? 'border-brand/30 text-brand bg-brand/5 hover:bg-brand/10'
                             : 'border-gray-200 text-gray-500 hover:bg-gray-50 hover:border-brand/30 hover:text-brand'

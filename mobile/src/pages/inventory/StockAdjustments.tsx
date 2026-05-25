@@ -1,4 +1,4 @@
-﻿import { useState, useCallback, useEffect } from 'react'
+﻿import { useState, useCallback, useEffect, useRef } from 'react'
 import { Plus, Search, Loader2, AlertCircle } from 'lucide-react'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { Badge } from '../../components/ui/Badge'
@@ -18,7 +18,7 @@ interface Adjustment {
   created_at: string
 }
 
-interface InvProduct { product_id: string; product_name: string }
+interface InvProduct { product_id: string; product_name: string; stock: number }
 
 const BLANK = { product_id: '', type: 'in', qty: '', reason: '', notes: '' }
 
@@ -26,6 +26,7 @@ export function StockAdjustments() {
   const { user } = useAuthStore()
   const [modal, setModal] = useState(false)
   const [search, setSearch] = useState('')
+  const [productSearch, setProductSearch] = useState('')
   const [form, setForm] = useState(BLANK)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
@@ -57,6 +58,26 @@ export function StockAdjustments() {
     return () => { void supabase.removeChannel(channel) }
   }, [])
 
+  // ── Barcode scanner — fills list search field ─────────────────────────────
+  const searchRef = useRef(search)
+  useEffect(() => { searchRef.current = search }, [search])
+  useEffect(() => {
+    let buffer = '', lastKeyAt = 0, charIntervals: number[] = []
+    const onKey = (e: KeyboardEvent) => {
+      const now = Date.now(), gap = now - lastKeyAt
+      if (gap > 200) { buffer = ''; charIntervals = [] }
+      lastKeyAt = now
+      if (e.key === 'Enter') {
+        const code = buffer.trim(); buffer = ''
+        const isScan = code.length >= 4 && charIntervals.every((t) => t < 50)
+        charIntervals = []
+        if (isScan) { setSearch(code); e.preventDefault() }
+      } else if (e.key.length === 1) { charIntervals.push(gap); buffer += e.key }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   const filtered = adjustments.filter((a) => {
     if (!search) return true
     const q = search.toLowerCase()
@@ -77,6 +98,7 @@ export function StockAdjustments() {
       })
       setModal(false)
       setForm(BLANK)
+      setProductSearch('')
       // tick bumped by realtime; manual bump as fallback
       setTick((t) => t + 1)
     } catch (err) {
@@ -92,17 +114,17 @@ export function StockAdjustments() {
         title="Stock Adjustments"
         subtitle="Manual inventory corrections with audit trail"
         actions={
-          <button onClick={() => setModal(true)} className="btn-primary flex items-center gap-1.5">
-            <Plus className="w-4 h-4" /> New Adjustment
+          <button onClick={() => setModal(true)} className="btn-primary flex items-center space-x-1.5">
+            <Plus className="w-4 h-4" /><span>New Adjustment</span>
           </button>
         }
       />
 
-      <div className="flex flex-wrap gap-3 mb-4">
-        <div className="relative flex-1 min-w-48">
+      <div className="mb-4">
+        <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
-            className="input-base pl-9"
+            className="input-base pl-9 w-full"
             placeholder="Search by product, reason, or staff..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -161,20 +183,41 @@ export function StockAdjustments() {
         )}
       </div>
 
-      <Modal open={modal} onClose={() => { setModal(false); setSaveError('') }} title="New Stock Adjustment">
+      <Modal open={modal} onClose={() => { setModal(false); setSaveError(''); setProductSearch('') }} title="New Stock Adjustment">
         <div className="space-y-4">
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1.5">Product</label>
+            {/* Search filter for the product dropdown */}
+            <div className="relative mb-1.5">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+              <input
+                className="input-base pl-8 text-xs"
+                placeholder="Search product..."
+                value={productSearch}
+                onChange={(e) => setProductSearch(e.target.value)}
+              />
+            </div>
             <select
               className="input-base"
               value={form.product_id}
               onChange={(e) => setForm((f) => ({ ...f, product_id: e.target.value }))}
             >
               <option value="">Select product...</option>
-              {products.map((p) => (
-                <option key={p.product_id} value={p.product_id}>{p.product_name}</option>
-              ))}
+              {products
+                .filter(p => !productSearch || p.product_name.toLowerCase().includes(productSearch.toLowerCase()))
+                .map((p) => (
+                  <option key={p.product_id} value={p.product_id}>{p.product_name}</option>
+                ))
+              }
             </select>
+            {form.product_id && (() => {
+              const p = products.find((pr) => pr.product_id === form.product_id)
+              return p ? (
+                <p className="text-xs text-gray-400 mt-1.5">
+                  Current stock: <span className="font-semibold text-gray-700">{p.stock}</span> units
+                </p>
+              ) : null
+            })()}
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1.5">Adjustment Type</label>
@@ -194,6 +237,9 @@ export function StockAdjustments() {
             <label className="block text-xs font-medium text-gray-700 mb-1.5">Quantity</label>
             <input
               type="number"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              min="0"
               className="input-base"
               placeholder={form.type === 'correction' ? 'Actual count (sets stock to this value)' : 'Units to adjust'}
               value={form.qty}
@@ -218,19 +264,24 @@ export function StockAdjustments() {
             <input className="input-base" placeholder="Optional details..." value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} />
           </div>
           {saveError && (
-            <div className="flex items-center gap-2 text-sm text-red-600">
-              <AlertCircle className="w-4 h-4" /> {saveError}
+            <div className="flex items-center space-x-2 text-sm text-red-600">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" /><span>{saveError}</span>
             </div>
           )}
-          <div className="flex gap-2 pt-2">
-            <button onClick={() => setModal(false)} className="btn-secondary flex-1">Cancel</button>
+          <div className="flex space-x-2 pt-2">
+            <button
+              onClick={() => { setModal(false); setSaveError(''); setProductSearch('') }}
+              className="btn-secondary flex-1"
+            >
+              Cancel
+            </button>
             <button
               onClick={handleSave}
               disabled={!form.product_id || !form.qty || !form.reason || saving}
-              className="btn-primary flex-1 disabled:opacity-50 flex items-center justify-center gap-2"
+              className="btn-primary flex-1 disabled:opacity-50 flex items-center justify-center space-x-2"
             >
               {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              Save Adjustment
+              <span>Save Adjustment</span>
             </button>
           </div>
         </div>

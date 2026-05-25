@@ -240,31 +240,45 @@ export async function printThermalReceipt(data: ThermalReceiptData): Promise<voi
 
     if (savedDevice) {
       setStatus('printing')
-      try {
-        // Reconnect if the connection was dropped (e.g. printer was off)
-        const isConnected = await checkConnection()
-        if (!isConnected) {
-          setStatus('connecting')
-          const result = await connectDevice(savedDevice.address)
-          if (!result.isConnected) {
-            setStatus('error', 'Could not connect to printer. Check that it is on and in range.')
-            _showToast(
-              `Could not connect to "${savedDevice.name}". ` +
-              'Make sure the printer is on and in range.',
-            )
-            return
+
+      // Retry up to MAX_PRINT_RETRIES times (reconnect + reprint each attempt)
+      const MAX_PRINT_RETRIES = 2
+      let lastError = ''
+
+      for (let attempt = 1; attempt <= MAX_PRINT_RETRIES; attempt++) {
+        try {
+          // Always verify connection before printing; reconnect if dropped
+          const isConnected = await checkConnection()
+          if (!isConnected) {
+            setStatus('connecting')
+            const result = await connectDevice(savedDevice.address)
+            if (!result.isConnected && result.code !== 0) {
+              lastError = result.desc ?? 'Could not connect to printer.'
+              // Wait 800 ms before next attempt
+              if (attempt < MAX_PRINT_RETRIES) await new Promise((r) => setTimeout(r, 800))
+              continue
+            }
+          }
+          setStatus('printing')
+          await printBluetooth(data, paperWidth)
+          setStatus('connected')
+          return   // ← success
+        } catch (err) {
+          lastError = err instanceof Error ? err.message : 'Unknown print error'
+          if (attempt < MAX_PRINT_RETRIES) {
+            // Brief pause before retry
+            await new Promise((r) => setTimeout(r, 800))
           }
         }
-        setStatus('printing')
-        await printBluetooth(data, paperWidth)
-        setStatus('connected')
-        return
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Unknown print error'
-        setStatus('error', msg)
-        _showToast(`Bluetooth print failed: ${msg}`)
-        return
       }
+
+      // All retries exhausted
+      setStatus('error', lastError)
+      _showToast(
+        `Print failed after ${MAX_PRINT_RETRIES} attempt(s): ${lastError}\n` +
+        `Check that "${savedDevice.name}" is on and in range.`,
+      )
+      return
     }
   }
 

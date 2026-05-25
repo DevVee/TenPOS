@@ -2,7 +2,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, ShoppingCart, Package, BarChart3,
   Users, Settings2, ClipboardList, ArrowLeftRight,
-  Shield, LogOut, ChevronDown, ChevronRight, X,
+  Shield, LogOut, ChevronDown, ChevronRight, X, RefreshCw,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useAuthStore } from '../../store/authStore'
@@ -23,8 +23,8 @@ const NAV: NavItem[] = [
   { label: 'POS Terminal',   to: '/pos',          icon: ShoppingCart,    roles: ['admin', 'manager', 'cashier'],           section: 'GENERAL' },
 
   // OPERATIONS
-  { label: 'Transactions',   to: '/transactions', icon: ClipboardList,   roles: ['admin', 'manager', 'viewer'],            section: 'OPERATIONS' },
-  { label: 'Returns',        to: '/returns',      icon: ArrowLeftRight,  roles: ['admin', 'manager'],                      section: 'OPERATIONS' },
+  { label: 'Transactions',   to: '/transactions', icon: ClipboardList,   roles: ['admin', 'manager', 'viewer', 'cashier'], section: 'OPERATIONS' },
+  { label: 'Returns',        to: '/returns',      icon: ArrowLeftRight,  roles: ['admin', 'manager', 'cashier'],           section: 'OPERATIONS' },
   {
     label: 'Inventory', to: '/inventory', icon: Package, roles: ['admin', 'manager'], section: 'OPERATIONS',
     children: [
@@ -55,6 +55,7 @@ const NAV: NavItem[] = [
       { label: 'Sync Log',   to: '/settings/sync-log' },
     ],
   },
+  { label: 'Sync Log',       to: '/settings/sync-log', icon: RefreshCw,       roles: ['cashier'],                         section: 'GENERAL' },
   { label: 'Audit Log',      to: '/audit',        icon: Shield,          roles: ['admin'],                                 section: 'MANAGEMENT' },
 ]
 

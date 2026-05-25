@@ -75,10 +75,10 @@ export function StatCard({
 
       {/* Label row */}
       <div className="flex items-center justify-between mb-2.5 md:mb-3">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center space-x-2">
           <p className="kpi-label">{label}</p>
           {live && (
-            <span className="flex items-center gap-1">
+            <span className="flex items-center space-x-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               <span className="text-[10px] font-medium text-emerald-600">Live</span>
             </span>
@@ -97,13 +97,13 @@ export function StatCard({
       </p>
 
       {/* Trend + sparkline */}
-      <div className="flex items-end justify-between gap-2">
-        <div className="flex flex-col gap-1.5">
+      <div className="flex items-end justify-between">
+        <div className="flex flex-col space-y-1">
           {/* Trend badge */}
           {trend ? (
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center space-x-1">
               <span
-                className={`inline-flex items-center gap-1 text-xs font-semibold px-1.5 py-0.5 rounded-md leading-none
+                className={`inline-flex items-center space-x-1 text-xs font-semibold px-1.5 py-0.5 rounded-md leading-none
                   ${trendPositive
                     ? 'bg-emerald-50 text-emerald-700'
                     : 'bg-red-50 text-red-600'

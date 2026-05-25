@@ -1,6 +1,5 @@
 ﻿import { useState, useMemo } from 'react'
-import { Download, TrendingUp, Loader2, CalendarRange, DollarSign, ShoppingBag } from 'lucide-react'
-import { downloadXLSX } from '../../lib/xlsxExport'
+import { TrendingUp, Loader2, CalendarRange, DollarSign, ShoppingBag } from 'lucide-react'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatCard } from '../../components/ui/StatCard'
 import { EmptyState } from '../../components/ui/EmptyState'
@@ -116,61 +115,6 @@ export function SalesReport() {
     count: Number(m.count),
   }))
 
-  const handleExport = () => {
-    const label    = periodLabel(period, customFrom, customTo)
-    const today    = isoDate(new Date())
-    const allProds = data?.topProducts ?? []
-    const grandRev = allProds.reduce((s, p) => s + Number(p.revenue), 0)
-
-    downloadXLSX(`TenPOS-Sales-${today}`, [
-      {
-        name: 'Summary', periodLabel: label,
-        columns: [{ header: 'Metric', width: 28 }, { header: 'Value', type: 'text', width: 24 }],
-        rows: [
-          ['Total Revenue',      fmt(totalRevenue)],
-          ['Total Transactions', String(totalTxns)],
-          ['Avg. Order Value',   fmt(summary ? Number(summary.avg_order_value) : 0)],
-          ['Top Product',        allProds[0]?.product_name ?? '—'],
-          ['Period',             label],
-        ],
-      },
-      {
-        name: 'By Day', periodLabel: label,
-        columns: [
-          { header: 'Date', type: 'date', width: 18 },
-          { header: 'Revenue (₱)', type: 'money', width: 18 },
-          { header: 'Orders', type: 'number', width: 12 },
-        ],
-        rows: (data?.salesByPeriod ?? []).map((p) => [
-          new Date(p.date + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }),
-          Number(p.revenue), Number(p.count),
-        ]),
-        totalsRow: [
-          'TOTAL',
-          (data?.salesByPeriod ?? []).reduce((s, p) => s + Number(p.revenue), 0),
-          (data?.salesByPeriod ?? []).reduce((s, p) => s + Number(p.count), 0),
-        ],
-      },
-      {
-        name: 'Products', periodLabel: label,
-        columns: [
-          { header: '#', type: 'number', width: 6 },
-          { header: 'Product Name', width: 36 },
-          { header: 'Category', width: 20 },
-          { header: 'Units Sold', type: 'number', width: 12 },
-          { header: 'Revenue (₱)', type: 'money', width: 18 },
-          { header: 'Revenue Share', type: 'percent', width: 14 },
-        ],
-        rows: allProds.map((p, i) => [
-          i + 1, p.product_name, p.category_name ?? 'Uncategorized',
-          p.quantity_sold, Number(p.revenue),
-          grandRev > 0 ? Number(p.revenue) / grandRev : 0,
-        ]),
-        totalsRow: ['', 'TOTAL', '', allProds.reduce((s, p) => s + p.quantity_sold, 0), grandRev, 1],
-      },
-    ], 'Sales Report')
-  }
-
   return (
     <div>
       <PageHeader
@@ -223,9 +167,6 @@ export function SalesReport() {
               </select>
             )}
 
-            <button onClick={handleExport} className="btn-secondary">
-              <Download className="w-3.5 h-3.5" /> Export
-            </button>
           </div>
         }
       />
@@ -236,8 +177,8 @@ export function SalesReport() {
         </div>
       ) : (
         <>
-          {/* KPI strip */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+          {/* KPI strip — always 2 per row */}
+          <div className="grid grid-cols-2 gap-3 mb-5">
             <StatCard label="Total Revenue"    value={fmt(totalRevenue)}  icon={DollarSign}  iconColor="emerald" />
             <StatCard label="Transactions"     value={String(totalTxns)}  icon={ShoppingBag} iconColor="blue"    />
             <StatCard

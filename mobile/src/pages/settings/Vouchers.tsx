@@ -147,7 +147,7 @@ export function Vouchers() {
                 const status = !v.active ? 'inactive' : expired ? 'expired' : exhausted ? 'exhausted' : 'active'
                 return (
                   <div key={v.id} className="p-4 hover:bg-gray-50 transition-colors">
-                    <div className="flex items-start justify-between gap-3">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                       <div className="flex items-start gap-3 min-w-0">
                         <div className="w-10 h-10 rounded-xl bg-brand-pale flex items-center justify-center flex-shrink-0">
                           <Tag className="w-5 h-5 text-brand" />
@@ -163,7 +163,9 @@ export function Vouchers() {
                               {status === 'active' ? 'Active' : status === 'expired' ? 'Expired' : status === 'exhausted' ? 'Used Up' : 'Inactive'}
                             </Badge>
                             <span className="text-xs font-semibold text-brand">
-                              {v.discount_type === 'percent' ? `${v.discount_value}% off` : `₱${v.discount_value} off`}
+                              {v.discount_type === 'percent'
+                                ? `${Number(v.discount_value) || 0}% off`
+                                : `₱${(Number(v.discount_value) || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })} off`}
                             </span>
                           </div>
                           <div className="flex items-center gap-3 mt-1.5 flex-wrap">
@@ -175,23 +177,36 @@ export function Vouchers() {
                               <Calendar className="w-3 h-3" />
                               <span className={expired ? 'text-red-400' : ''}>{v.expires_at ? v.expires_at.slice(0, 10) : '—'}</span>
                             </div>
-                            {v.min_purchase > 0 && (
-                              <span className="text-xs text-gray-400">Min ₱{v.min_purchase}</span>
+                            {(Number(v.min_purchase) || 0) > 0 && (
+                              <span className="text-xs text-gray-400">Min ₱{(Number(v.min_purchase) || 0).toLocaleString()}</span>
                             )}
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <button onClick={() => handleToggle(v)} className="relative flex-shrink-0" title={v.active ? 'Deactivate' : 'Activate'}>
-                          <div className={`w-9 h-5 rounded-full transition-colors ${v.active ? 'bg-brand' : 'bg-gray-200'}`}>
-                            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${v.active ? 'translate-x-4' : 'translate-x-0.5'}`} />
-                          </div>
+                      {/* Action buttons — large enough for tablet touch */}
+                      <div className="flex items-center gap-2 flex-shrink-0 mt-3 sm:mt-0">
+                        {v.active ? (
+                          <button
+                            onClick={() => handleToggle(v)}
+                            className="h-8 px-3 text-xs font-medium border border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-600 transition-colors flex-shrink-0"
+                          >Disable</button>
+                        ) : (
+                          <button
+                            onClick={() => handleToggle(v)}
+                            className="h-8 px-3 text-xs font-medium border border-green-200 bg-green-50 hover:bg-green-100 text-green-700 transition-colors flex-shrink-0"
+                          >Enable</button>
+                        )}
+                        <button
+                          onClick={() => openEdit(v)}
+                          className="flex items-center gap-1.5 h-8 px-3 border border-gray-200 bg-white hover:bg-gray-50 hover:border-brand hover:text-brand text-gray-600 text-xs font-medium transition-colors"
+                        >
+                          <Pencil className="w-3.5 h-3.5" /> Edit
                         </button>
-                        <button onClick={() => openEdit(v)} className="p-1.5 text-gray-300 hover:text-brand transition-colors">
-                          <Pencil className="w-4 h-4" />
-                        </button>
-                        <button onClick={() => setDeleteId(v.id)} className="p-1.5 text-gray-300 hover:text-red-400 transition-colors">
-                          <Trash2 className="w-4 h-4" />
+                        <button
+                          onClick={() => setDeleteId(v.id)}
+                          className="flex items-center gap-1.5 h-8 px-3 border border-red-200 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-medium transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" /> Delete
                         </button>
                       </div>
                     </div>

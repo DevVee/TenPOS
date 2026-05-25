@@ -485,6 +485,20 @@ export async function apiUpdateProduct(id: string, data: Record<string, unknown>
     await stockQ
   }
 
+  // Full variants replace — delete existing, reinsert the new set
+  const variants = data.variants as { label: string; value: string; price_adjustment: number }[] | undefined
+  if (variants !== undefined) {
+    await supabase.from('product_variants').delete().eq('product_id', id)
+    if (variants.length > 0) {
+      await supabase.from('product_variants').insert(
+        variants.map((v) => ({
+          product_id: id, label: v.label, value: v.value,
+          price_adjustment: Number(v.price_adjustment ?? 0),
+        })),
+      )
+    }
+  }
+
   void addAudit('PRODUCT_UPDATED', `Updated product: ${id}`, 'info')
   return apiGetProduct(id)
 }
@@ -740,6 +754,63 @@ export async function apiVoidTransaction(id: string, reason: string) {
 
 // ─── Manager Override PIN ─────────────────────────────────────────────────────
 
+const MANAGER_PIN_KEY = 'tenpos_manager_pin_hash'
+const PBKDF2_ITER     = 100_000
+
+async function _pbkdf2Web(pin: string, saltBytes: Uint8Array): Promise<string> {
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(pin), { name: 'PBKDF2' }, false, ['deriveBits'],
+  )
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', hash: 'SHA-256', salt: saltBytes.buffer as ArrayBuffer, iterations: PBKDF2_ITER },
+    keyMaterial, 256,
+  )
+  return Array.from(new Uint8Array(bits)).map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+/** Verify a PIN against the manager hash cached in localStorage. */
+export async function verifyManagerPin(pin: string): Promise<boolean> {
+  const stored = localStorage.getItem(MANAGER_PIN_KEY)
+  if (!stored) return false
+  const colonIdx = stored.indexOf(':')
+  if (colonIdx === -1) return false
+  const saltHex  = stored.slice(0, colonIdx)
+  const hashHex  = stored.slice(colonIdx + 1)
+  const saltBytes = new Uint8Array((saltHex.match(/../g) ?? []).map((b) => parseInt(b, 16)))
+  const hash = await _pbkdf2Web(pin, saltBytes)
+  return hash === hashHex
+}
+
+/** Fetch the manager PIN hash from DB and cache it locally for offline use. */
+export async function apiLoadManagerPin(): Promise<void> {
+  try {
+    const { data } = await supabase.rpc('get_manager_pin_hash')
+    if (data) localStorage.setItem(MANAGER_PIN_KEY, data as string)
+  } catch { /* offline — use cached value */ }
+}
+
+/** Process a return using the manager override PIN (cashier-initiated).
+ *  Tries the SECURITY DEFINER RPC first (bypasses RLS); falls back to
+ *  the manager-role RPC for admin/manager users.
+ */
+export async function apiReturnWithPin(
+  id: string,
+  items: { item_id: string; quantity: number; reason?: string }[],
+  _pin: string,
+): Promise<{ ok: boolean }> {
+  // Try SECURITY DEFINER path first (works for all roles)
+  const { error: rpcErr } = await supabase.rpc('return_with_pin', {
+    p_transaction_id: id,
+    p_pin:            _pin,
+  })
+  if (!rpcErr) return { ok: true }
+  // 42883 = function does not exist → fall back to manager RPC
+  if (rpcErr.code === '42883' || (rpcErr.message ?? '').includes('does not exist')) {
+    return apiReturnTransaction(id, items)
+  }
+  throw new Error(rpcErr.message)
+}
+
 /** Void a transaction using a manager override PIN (cashier-initiated) */
 export async function apiVoidWithPin(id: string, reason: string, pin: string) {
   const { error } = await supabase.rpc('void_with_pin', {
@@ -751,10 +822,27 @@ export async function apiVoidWithPin(id: string, reason: string, pin: string) {
   return { ok: true }
 }
 
-/** Set (or change) the current manager's override PIN */
+/** Set (or change) the current manager's override PIN.
+ *  PIN is hashed client-side (PBKDF2) before being sent so the DB stores
+ *  a format the app can fetch back and verify offline.
+ */
 export async function apiSetOverridePin(pin: string) {
-  const { error } = await supabase.rpc('set_override_pin', { p_pin: pin })
+  // PBKDF2 hash using Web Crypto — same algorithm as mobile/src/lib/db.ts
+  const salt = crypto.getRandomValues(new Uint8Array(16))
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(pin), { name: 'PBKDF2' }, false, ['deriveBits'],
+  )
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', hash: 'SHA-256', salt: salt.buffer as ArrayBuffer, iterations: 100_000 },
+    keyMaterial, 256,
+  )
+  const toHex = (buf: Uint8Array) =>
+    Array.from(buf).map((b) => b.toString(16).padStart(2, '0')).join('')
+  const pinHash = `${toHex(salt)}:${toHex(new Uint8Array(bits))}`
+  const { error } = await supabase.rpc('set_override_pin', { p_hash: pinHash })
   if (error) throw new Error(error.message)
+  // Cache locally so the web app can also verify offline
+  localStorage.setItem('tenpos_manager_pin_hash', pinHash)
 }
 
 /** Remove the current manager's override PIN */

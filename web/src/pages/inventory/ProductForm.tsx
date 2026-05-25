@@ -140,7 +140,7 @@ export function ProductForm() {
     // Core
     name: '', sku: '', barcode: '', category_id: '', price: '', imageUrl: '',
     // Details
-    description: '', brand: '', material: '', color: '',
+    description: '', brand: '', material: '', materialOther: '', color: '',
     // Dimensions
     length_cm: '', width_cm: '', height_cm: '', weight_grams: '',
     // Internal
@@ -172,23 +172,27 @@ export function ProductForm() {
             tags?: string[] | null; notes?: string | null
             variants: { label: string; value: string; price_adjustment: number }[]
           }
+          // Detect custom material (value not in predefined list → treat as "Other")
+          const storedMaterial = p.material ?? ''
+          const isKnownMaterial = MATERIALS.includes(storedMaterial)
           setForm({
-            name:         p.name,
-            sku:          p.sku ?? '',
-            barcode:      p.barcode ?? '',
-            category_id:  p.category_id ?? '',
-            price:        String(p.price),
-            imageUrl:     p.image_url ?? '',
-            description:  p.description ?? '',
-            brand:        p.brand ?? '',
-            material:     p.material ?? '',
-            color:        p.color ?? '',
-            weight_grams: p.weight_grams != null ? String(p.weight_grams) : '',
-            length_cm:    p.length_cm    != null ? String(p.length_cm)    : '',
-            width_cm:     p.width_cm     != null ? String(p.width_cm)     : '',
-            height_cm:    p.height_cm    != null ? String(p.height_cm)    : '',
-            tags:         p.tags?.join(', ') ?? '',
-            notes:        p.notes ?? '',
+            name:          p.name,
+            sku:           p.sku ?? '',
+            barcode:       p.barcode ?? '',
+            category_id:   p.category_id ?? '',
+            price:         String(p.price),
+            imageUrl:      p.image_url ?? '',
+            description:   p.description ?? '',
+            brand:         p.brand ?? '',
+            material:      isKnownMaterial ? storedMaterial : 'Other',
+            materialOther: isKnownMaterial ? '' : storedMaterial,
+            color:         p.color ?? '',
+            weight_grams:  p.weight_grams != null ? String(p.weight_grams) : '',
+            length_cm:     p.length_cm    != null ? String(p.length_cm)    : '',
+            width_cm:      p.width_cm     != null ? String(p.width_cm)     : '',
+            height_cm:     p.height_cm    != null ? String(p.height_cm)    : '',
+            tags:          p.tags?.join(', ') ?? '',
+            notes:         p.notes ?? '',
           })
           setVariants(p.variants.map((v) => ({
             label: v.label, value: v.value, priceAdj: String(v.price_adjustment),
@@ -255,7 +259,9 @@ export function ProductForm() {
         image_url:    form.imageUrl || undefined,
         description:  form.description.trim() || undefined,
         brand:        form.brand.trim() || undefined,
-        material:     form.material || undefined,
+        material:     form.material === 'Other'
+                        ? (form.materialOther.trim() || undefined)
+                        : (form.material || undefined),
         color:        form.color.trim() || undefined,
         weight_grams: form.weight_grams ? parseFloat(form.weight_grams) : undefined,
         length_cm:    form.length_cm   ? parseFloat(form.length_cm)    : undefined,
@@ -414,6 +420,15 @@ export function ProductForm() {
               <select className="input-base" value={form.material} onChange={(e) => set('material', e.target.value)}>
                 {MATERIALS.map((m) => <option key={m} value={m}>{m || 'Select material…'}</option>)}
               </select>
+              {form.material === 'Other' && (
+                <input
+                  className="input-base mt-2"
+                  placeholder="Specify material (e.g. Ripstop, Cordura…)"
+                  value={form.materialOther}
+                  onChange={(e) => set('materialOther', e.target.value)}
+                  autoFocus
+                />
+              )}
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-700 mb-1.5">Color / Print</label>

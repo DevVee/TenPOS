@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { RefreshCw, ShoppingCart, Database, XCircle, WifiOff, Trash2 } from 'lucide-react'
+import { PageHeader } from '../../components/ui/PageHeader'
 import { getSyncLog, clearSyncLog, refreshProductCache, refreshInventoryCache } from '../../lib/sync'
 import type { SyncLogEntry } from '../../lib/sync'
 
@@ -51,29 +52,30 @@ export function SyncLog() {
   const lastEntry  = log[0]
 
   return (
-    <div className="space-y-5 max-w-2xl">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-black text-gray-900">Sync Log</h1>
-          <p className="text-sm text-gray-400 mt-0.5">History of transactions and cache refreshes</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleRefreshCache}
-            disabled={refreshing}
-            className="btn-secondary gap-2 text-sm"
-          >
-            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-            {refreshing ? 'Refreshing…' : 'Refresh Cache'}
-          </button>
-          {log.length > 0 && (
-            <button onClick={handleClear} className="btn-secondary gap-2 text-sm text-red-500 hover:text-red-600">
-              <Trash2 className="w-4 h-4" />
-              Clear
+    <div>
+      <PageHeader
+        title="Sync Log"
+        subtitle="History of transactions and cache refreshes"
+        actions={
+          <div className="flex items-center" style={{ gap: '8px' }}>
+            <button
+              onClick={handleRefreshCache}
+              disabled={refreshing}
+              className="btn-secondary text-sm"
+            >
+              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+              <span>{refreshing ? 'Refreshing…' : 'Refresh Cache'}</span>
             </button>
-          )}
-        </div>
-      </div>
+            {log.length > 0 && (
+              <button onClick={handleClear} className="btn-secondary text-sm text-red-500 hover:text-red-600">
+                <Trash2 className="w-4 h-4" />
+                <span>Clear</span>
+              </button>
+            )}
+          </div>
+        }
+      />
+      <div className="space-y-5">
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -155,6 +157,7 @@ export function SyncLog() {
             )
           })
         )}
+      </div>
       </div>
     </div>
   )

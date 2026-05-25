@@ -30,7 +30,7 @@ interface Product {
 
 interface Adjustment {
   id: string; type: string; quantity: number; reason: string
-  created_at: string; branch_id: string
+  created_at: string; branch_id: string; branch_name?: string | null
 }
 
 function InfoRow({ label, value }: { label: string; value?: string | null }) {
@@ -281,7 +281,7 @@ export function ProductDetail() {
                     {m.type === 'in' || m.type === 'return' ? '+' : '-'}{m.quantity}
                   </td>
                   <td className="px-4 py-3 text-xs text-gray-400 hidden sm:table-cell">{m.reason}</td>
-                  <td className="px-4 py-3 text-xs text-gray-400 hidden md:table-cell">{m.branch_id}</td>
+                  <td className="px-4 py-3 text-xs text-gray-400 hidden md:table-cell">{m.branch_name ?? '—'}</td>
                 </tr>
               ))}
             </tbody>

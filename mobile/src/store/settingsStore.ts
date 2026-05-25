@@ -46,6 +46,8 @@ interface SettingsState {
   printerEnabled: boolean
   printerWidth: '58mm' | '80mm'
   language: string
+  /** Branch-level PIN for device unlock and cashier void/return authorization */
+  branchPin: string
   categories: Category[]
   vouchers: Voucher[]
   // Actions
@@ -84,6 +86,7 @@ export const useSettingsStore = create<SettingsState>()(persist((set, get) => ({
   printerEnabled: false,
   printerWidth: '58mm',
   language: 'en-PH',
+  branchPin: '',
   categories: [],
   vouchers: [],
 

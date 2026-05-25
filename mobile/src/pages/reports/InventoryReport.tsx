@@ -1,7 +1,6 @@
-import { useState, useMemo } from 'react'
-import { Download, Loader2, Search, AlertTriangle } from 'lucide-react'
+import { useState, useMemo, useEffect, useRef } from 'react'
+import { Loader2, Search, AlertTriangle } from 'lucide-react'
 import { PageHeader } from '../../components/ui/PageHeader'
-import { downloadXLSX } from '../../lib/xlsxExport'
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
 import { StatCard } from '../../components/ui/StatCard'
 import { Package, TrendingDown, TrendingUp } from 'lucide-react'
@@ -32,6 +31,26 @@ export function InventoryReport() {
   const [search,        setSearch]        = useState('')
   const [category,      setCategory]      = useState('All')
   const [lowStockOnly,  setLowStockOnly]  = useState(false)
+
+  // ── Barcode scanner (HID keyboard wedge) ─────────────────────────────────
+  const searchRef = useRef(search)
+  useEffect(() => { searchRef.current = search }, [search])
+  useEffect(() => {
+    let buffer = '', lastKeyAt = 0, charIntervals: number[] = []
+    const onKey = (e: KeyboardEvent) => {
+      const now = Date.now(), gap = now - lastKeyAt
+      if (gap > 200) { buffer = ''; charIntervals = [] }
+      lastKeyAt = now
+      if (e.key === 'Enter') {
+        const code = buffer.trim(); buffer = ''
+        const isScan = code.length >= 4 && charIntervals.every((t) => t < 50)
+        charIntervals = []
+        if (isScan) { setSearch(code); e.preventDefault() }
+      } else if (e.key.length === 1) { charIntervals.push(gap); buffer += e.key }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   const stockSummary    = data?.stockSummary    ?? []
   const fastMovers      = data?.fastMovers      ?? []
@@ -67,96 +86,11 @@ export function InventoryReport() {
     stock: c.total_stock,
   }))
 
-  const today = new Date().toISOString().slice(0, 10)
-
-  const handleExport = () => {
-    const margin = (p: StockItem) =>
-      Number(p.cost) > 0 && Number(p.price) > 0
-        ? (Number(p.price) - Number(p.cost)) / Number(p.price)
-        : 0
-
-    downloadXLSX(
-      `TenPOS-Inventory-${today}`,
-      [
-        // Sheet 1: Stock Levels
-        {
-          name: 'Stock Levels',
-          periodLabel: `Generated ${today}`,
-          columns: [
-            { header: '#',              type: 'number', width: 6 },
-            { header: 'Product Name',   width: 36 },
-            { header: 'SKU',            width: 16 },
-            { header: 'Category',       width: 22 },
-            { header: 'Cost (₱)',       type: 'money',  width: 14 },
-            { header: 'Price (₱)',      type: 'money',  width: 14 },
-            { header: 'Margin %',       type: 'percent', width: 12 },
-            { header: 'Stock',          type: 'number', width: 10 },
-            { header: 'Reorder Point',  type: 'number', width: 14 },
-            { header: 'Status',         width: 14 },
-            { header: 'Stock Value (₱)', type: 'money', width: 18 },
-          ],
-          rows: stockSummary.map((p, i) => [
-            i + 1,
-            p.name,
-            p.sku,
-            p.category_name ?? 'Uncategorized',
-            Number(p.cost),
-            Number(p.price),
-            margin(p),
-            p.total_stock,
-            p.reorder_point,
-            p.total_stock === 0 ? 'Out of Stock' : p.total_stock <= p.reorder_point ? 'Low Stock' : 'OK',
-            Number(p.stock_value),
-          ]),
-          totalsRow: [
-            '',
-            `${stockSummary.length} products`,
-            '', '', '', '', '',
-            stockSummary.reduce((s, p) => s + p.total_stock, 0),
-            '',
-            '',
-            totalStockValue,
-          ],
-        },
-
-        // Sheet 2: Fast Movers
-        {
-          name: 'Fast Movers (30d)',
-          periodLabel: 'Last 30 days',
-          columns: [
-            { header: '#',            type: 'number', width: 6 },
-            { header: 'Product Name', width: 36 },
-            { header: 'Units Sold',   type: 'number', width: 14 },
-            { header: 'Revenue (₱)',  type: 'money',  width: 18 },
-          ],
-          rows: fastMovers.map((p, i) => [
-            i + 1,
-            p.product_name,
-            p.quantity_sold,
-            Number(p.revenue),
-          ]),
-          totalsRow: [
-            '',
-            'TOTAL',
-            fastMovers.reduce((s, p) => s + p.quantity_sold, 0),
-            fastMovers.reduce((s, p) => s + Number(p.revenue), 0),
-          ],
-        },
-      ],
-      'Inventory Report'
-    )
-  }
-
   return (
     <div>
       <PageHeader
         title="Inventory Report"
         subtitle="Stock movement, turnover, and valuation"
-        actions={
-          <button onClick={handleExport} className="btn-secondary flex items-center gap-1.5">
-            <Download className="w-4 h-4" /> Export Excel
-          </button>
-        }
       />
 
       {loading ? (
@@ -189,43 +123,44 @@ export function InventoryReport() {
             )}
           </div>
 
-          {/* â"€â"€ Filters bar â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */}
-          <div className="flex flex-wrap gap-2 mb-3">
-            {/* Search */}
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search product or SKU..."
-                className="input-base pl-8 py-1.5 text-sm w-full"
-              />
+          {/* Filters bar */}
+          <div className="space-y-2 mb-3">
+            {/* Row 1: Search + Category */}
+            <div className="flex items-center space-x-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search product or SKU… (barcode scan supported)"
+                  className="input-base pl-8 py-1.5 text-sm w-full"
+                />
+              </div>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="input-base py-1.5 text-sm"
+              >
+                {categories.map((c) => <option key={c}>{c}</option>)}
+              </select>
             </div>
 
-            {/* Category */}
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="input-base py-1.5 text-sm"
-            >
-              {categories.map((c) => <option key={c}>{c}</option>)}
-            </select>
-
-            {/* Low stock toggle */}
-            <button
-              onClick={() => setLowStockOnly((v) => !v)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-all ${
-                lowStockOnly
-                  ? 'bg-yellow-50 text-yellow-700 border-yellow-300'
-                  : 'bg-white text-gray-500 border-gray-200 hover:border-yellow-200 hover:text-yellow-600'
-              }`}
-            >
-              <AlertTriangle className="w-3.5 h-3.5" />
-              Low Stock Only
-            </button>
-
-            <span className="text-xs text-gray-400 self-center ml-1">{filteredStock.length} products</span>
+            {/* Row 2: Low stock toggle + count */}
+            <div className="flex items-center space-x-3 pt-1">
+              <button
+                onClick={() => setLowStockOnly((v) => !v)}
+                className={`flex items-center space-x-1.5 px-3 py-1.5 border text-sm font-medium transition-all ${
+                  lowStockOnly
+                    ? 'bg-yellow-50 text-yellow-700 border-yellow-300'
+                    : 'bg-white text-gray-500 border-gray-200 hover:border-yellow-200 hover:text-yellow-600'
+                }`}
+              >
+                <AlertTriangle className="w-3.5 h-3.5" />
+                <span>Low Stock Only</span>
+              </button>
+              <span className="text-xs text-gray-400">{filteredStock.length} products</span>
+            </div>
           </div>
 
           {/* Stock table */}
