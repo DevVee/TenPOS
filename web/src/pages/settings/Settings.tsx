@@ -5,7 +5,10 @@ import { Modal } from '../../components/ui/Modal'
 import { useSettingsStore } from '../../store/settingsStore'
 import { useAuthStore } from '../../store/authStore'
 import { useBranchStore } from '../../store/branchStore'
-import { apiGetMyPinStatus, apiSetOverridePin, apiClearOverridePin } from '../../lib/api'
+import {
+  apiGetMyPinStatus, apiSetOverridePin, apiClearOverridePin,
+  apiGetStoreSettings, apiUpdateStoreSettings,
+} from '../../lib/api'
 import {
   runBackup, runSQLBackup, getLastBackup, isAutoBackupEnabled, setAutoBackupEnabled,
   isAutoBackupDue, daysSinceLastBackup, type BackupMeta,
@@ -51,7 +54,9 @@ export function Settings() {
   const s = useSettingsStore()
   const { user } = useAuthStore()
   const { activeBranchId, activeBranchName, activeBranchAddress } = useBranchStore()
-  const [saved, setSaved] = useState(false)
+  const [saved,      setSaved]      = useState(false)
+  const [saveError,  setSaveError]  = useState('')
+  const [dbLoading,  setDbLoading]  = useState(true)
 
   // ── Backup state ────────────────────────────────────────────────────────────
   const [backupRunning,  setBackupRunning]  = useState(false)
@@ -178,6 +183,61 @@ export function Settings() {
     printerWidth:          s.printerWidth,
   })
 
+  // ── Load settings from Supabase on mount ──────────────────────────────────
+  useEffect(() => {
+    void (async () => {
+      try {
+        const db = await apiGetStoreSettings()
+        if (Object.keys(db).length === 0) { setDbLoading(false); return }
+        setForm((f) => ({
+          ...f,
+          storeName:             (db.storeName             as string  | undefined) ?? f.storeName,
+          address:               (db.address               as string  | undefined) ?? f.address,
+          phone:                 (db.phone                 as string  | undefined) ?? f.phone,
+          email:                 (db.email                 as string  | undefined) ?? f.email,
+          website:               (db.website               as string  | undefined) ?? f.website,
+          receiptHeader:         (db.receiptHeader         as string  | undefined) ?? f.receiptHeader,
+          receiptFooter:         (db.receiptFooter         as string  | undefined) ?? f.receiptFooter,
+          receiptShowLogo:       (db.receiptShowLogo       as boolean | undefined) ?? f.receiptShowLogo,
+          requirePinForDiscount: (db.requirePinForDiscount as boolean | undefined) ?? f.requirePinForDiscount,
+          requirePinForVoid:     (db.requirePinForVoid     as boolean | undefined) ?? f.requirePinForVoid,
+          autoSyncInterval:      (db.autoSyncInterval      as string  | undefined) ?? f.autoSyncInterval,
+          currencySymbol:        (db.currencySymbol        as string  | undefined) ?? f.currencySymbol,
+          dateFormat:            (db.dateFormat            as string  | undefined) ?? f.dateFormat,
+          timeFormat:            (db.timeFormat            as string  | undefined) ?? f.timeFormat,
+          timezone:              (db.timezone              as string  | undefined) ?? f.timezone,
+          lowStockThreshold:     (db.lowStockThreshold     as string  | undefined) ?? f.lowStockThreshold,
+          printerEnabled:        (db.printerEnabled        as boolean | undefined) ?? f.printerEnabled,
+          printerWidth:          (db.printerWidth          as string  | undefined) ?? f.printerWidth,
+        }))
+        // Sync to local store so receipt/POS pages pick up live values
+        s.update({
+          storeName:             (db.storeName             as string)  || s.storeName,
+          address:               (db.address               as string)  || s.address,
+          phone:                 (db.phone                 as string)  || s.phone,
+          email:                 (db.email                 as string)  || s.email,
+          website:               (db.website               as string)  || s.website,
+          receiptHeader:         (db.receiptHeader         as string)  || s.receiptHeader,
+          receiptFooter:         (db.receiptFooter         as string)  || s.receiptFooter,
+          receiptShowLogo:       (db.receiptShowLogo       as boolean) ?? s.receiptShowLogo,
+          requirePinForDiscount: (db.requirePinForDiscount as boolean) ?? s.requirePinForDiscount,
+          requirePinForVoid:     (db.requirePinForVoid     as boolean) ?? s.requirePinForVoid,
+          autoSyncInterval:      parseInt((db.autoSyncInterval as string) ?? '') || s.autoSyncInterval,
+          currencySymbol:        (db.currencySymbol        as string)  || s.currencySymbol,
+          dateFormat:            ((db.dateFormat           as typeof s.dateFormat)  || s.dateFormat),
+          timeFormat:            ((db.timeFormat           as typeof s.timeFormat)  || s.timeFormat),
+          timezone:              (db.timezone              as string)  || s.timezone,
+          lowStockThreshold:     parseInt((db.lowStockThreshold as string) ?? '') || s.lowStockThreshold,
+          printerEnabled:        (db.printerEnabled        as boolean) ?? s.printerEnabled,
+          printerWidth:          ((db.printerWidth         as typeof s.printerWidth) || s.printerWidth),
+        })
+      } catch { /* offline — keep localStorage values */ } finally {
+        setDbLoading(false)
+      }
+    })()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const set = (k: string, v: string | boolean) => setForm((f) => ({ ...f, [k]: v }))
 
   // When the active branch changes, update the store name/address fields to
@@ -195,7 +255,35 @@ export function Settings() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeBranchId, activeBranchName, activeBranchAddress])
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    setSaveError('')
+    const patch = {
+      storeName:             form.storeName,
+      address:               form.address,
+      phone:                 form.phone,
+      email:                 form.email,
+      website:               form.website,
+      receiptHeader:         form.receiptHeader,
+      receiptFooter:         form.receiptFooter,
+      receiptShowLogo:       form.receiptShowLogo,
+      requirePinForDiscount: form.requirePinForDiscount,
+      requirePinForVoid:     form.requirePinForVoid,
+      autoSyncInterval:      form.autoSyncInterval,
+      currencySymbol:        form.currencySymbol,
+      dateFormat:            form.dateFormat,
+      timeFormat:            form.timeFormat,
+      timezone:              form.timezone,
+      lowStockThreshold:     form.lowStockThreshold,
+      printerEnabled:        form.printerEnabled,
+      printerWidth:          form.printerWidth,
+    }
+    // 1. Save to Supabase (persists across devices / browsers)
+    try {
+      await apiUpdateStoreSettings(patch)
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to save to database — settings saved locally only.')
+    }
+    // 2. Always sync to local store so receipt/POS pick up new values immediately
     s.update({
       storeName:             form.storeName,
       address:               form.address,
@@ -226,12 +314,22 @@ export function Settings() {
         title="System Settings"
         subtitle="Configure store information and POS behavior"
         actions={
-          <button
-            onClick={handleSave}
-            className={`btn-primary flex items-center gap-1.5 transition-all ${saved ? 'bg-green-600 hover:bg-green-700' : ''}`}
-          >
-            {saved ? <><Check className="w-4 h-4" /> Saved!</> : <><Save className="w-4 h-4" /> Save Changes</>}
-          </button>
+          <div className="flex items-center gap-3">
+            {saveError && (
+              <span className="text-xs text-red-600 max-w-xs truncate">{saveError}</span>
+            )}
+            <button
+              onClick={() => { void handleSave() }}
+              disabled={dbLoading}
+              className={`btn-primary flex items-center gap-1.5 transition-all disabled:opacity-60 ${saved ? 'bg-green-600 hover:bg-green-700' : ''}`}
+            >
+              {dbLoading
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> Loading…</>
+                : saved
+                  ? <><Check className="w-4 h-4" /> Saved!</>
+                  : <><Save className="w-4 h-4" /> Save Changes</>}
+            </button>
+          </div>
         }
       />
 
